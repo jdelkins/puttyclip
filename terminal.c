@@ -1677,7 +1677,7 @@ void term_reconfig(Terminal *term, Conf *conf)
     /* NOTE: This isn't really ready yet ... */
     if (!term->utf && term->ucsdata->line_codepage==CP_UTF8)
 	term->utf = 1;
-    if (!conf_get_str(term->conf, CONF_printer)) {
+    if (!conf_get_str(term->conf, CONF_printer) || conf_get_int(term->conf, CONF_printclip)) {
 	term_print_finish(term);
     }
     term_schedule_tblink(term);
@@ -2898,12 +2898,69 @@ static void do_osc(Terminal *term)
 }
 
 /*
+ * Windows clipboard support
+ * Diomidis Spinellis, June 2003
+ * JDE, March 2016
+ */
+static char *clip_b, *clip_bp;		/* Buffer, pointer to buffer insertion point */
+static size_t clip_bsiz, clip_remsiz;	/* Buffer, size, remaining size */
+static size_t clip_total;		/* Total read */
+
+#define CLIP_CHUNK 4096
+
+static void clipboard_init(void)
+{
+    if (clip_b)
+	sfree(clip_b);
+    clip_bp = clip_b = smalloc(clip_remsiz = clip_bsiz = CLIP_CHUNK);
+    clip_total = 0;
+}
+
+static void clipboard_data(void *buff,  int len)
+{
+    memcpy(clip_bp, buff, len);
+    clip_remsiz -= len;
+    clip_total += len;
+    clip_bp += len;
+    if (clip_remsiz < CLIP_CHUNK) {
+	clip_b = srealloc(clip_b, clip_bsiz *= 2);
+	clip_remsiz = clip_bsiz - clip_total;
+	clip_bp = clip_b + clip_total;
+    }
+}
+
+static void clipboard_copy(void)
+{
+    HANDLE hglb;
+
+    if (!OpenClipboard(NULL))
+	return; // error("Unable to open the clipboard");
+    if (!EmptyClipboard()) {
+	CloseClipboard(); 
+	return; // error("Unable to empty the clipboard");
+    }
+
+    hglb = GlobalAlloc(GMEM_DDESHARE, clip_total + 1);
+    if (hglb == NULL) { 
+	CloseClipboard(); 
+	return; // error("Unable to allocate clipboard memory");
+    }
+    memcpy(hglb, clip_b, clip_total);
+    ((char *)hglb)[clip_total] = '\0';
+    SetClipboardData(CF_TEXT, hglb); 
+    CloseClipboard(); 
+}
+
+/*
  * ANSI printing routines.
  */
 static void term_print_setup(Terminal *term, char *printer)
 {
     bufchain_clear(&term->printer_buf);
-    term->print_job = printer_start_job(printer);
+    if (conf_get_int(term->conf, CONF_printclip))
+	clipboard_init();
+    else
+	term->print_job = printer_start_job(printer);
 }
 static void term_print_flush(Terminal *term)
 {
@@ -2914,7 +2971,10 @@ static void term_print_flush(Terminal *term)
 	bufchain_prefix(&term->printer_buf, &data, &len);
 	if (len > size-5)
 	    len = size-5;
-	printer_job_data(term->print_job, data, len);
+	if (conf_get_int(term->conf, CONF_printclip))
+	    clipboard_data(data, len);
+	else
+	    printer_job_data(term->print_job, data, len);
 	bufchain_consume(&term->printer_buf, len);
     }
 }
@@ -2935,11 +2995,17 @@ static void term_print_finish(Terminal *term)
 	    bufchain_consume(&term->printer_buf, size);
 	    break;
 	} else {
-	    printer_job_data(term->print_job, &c, 1);
+	    if (conf_get_int(term->conf, CONF_printclip))
+		clipboard_data(&c, 1);
+	    else
+		printer_job_data(term->print_job, &c, 1);
 	    bufchain_consume(&term->printer_buf, 1);
 	}
     }
-    printer_finish_job(term->print_job);
+    if (conf_get_int(term->conf, CONF_printclip))
+	clipboard_copy();
+    else
+	printer_finish_job(term->print_job);
     term->print_job = NULL;
     term->printing = term->only_printing = FALSE;
 }
@@ -4178,8 +4244,9 @@ static void term_out(Terminal *term)
 			    char *printer;
 			    if (term->esc_nargs != 1) break;
 			    if (term->esc_args[0] == 5 && 
-				(printer = conf_get_str(term->conf,
-							CONF_printer))[0]) {
+				((printer = conf_get_str(term->conf,
+							CONF_printer))[0] ||
+				 conf_get_int(term->conf, CONF_printclip))) {
 				term->printing = TRUE;
 				term->only_printing = !term->esc_query;
 				term_print_setup(term, printer);

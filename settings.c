@@ -624,6 +624,7 @@ void save_open_settings(void *sesskey, Conf *conf)
     write_setting_i(sesskey, "UTF8Override", conf_get_int(conf, CONF_utf8_override));
     write_setting_i(sesskey, "UTF8InitMode", conf_get_int(conf, CONF_utf8_initmode));
     write_setting_s(sesskey, "Printer", conf_get_str(conf, CONF_printer));
+    write_setting_i(sesskey, "PrintClip", conf_get_int(conf, CONF_printclip));
     write_setting_i(sesskey, "CapsLockCyr", conf_get_int(conf, CONF_xlat_capslockcyr));
     write_setting_i(sesskey, "ScrollBar", conf_get_int(conf, CONF_scrollbar));
     write_setting_i(sesskey, "ScrollBarFullScreen", conf_get_int(conf, CONF_scrollbar_in_fullscreen));
@@ -981,6 +982,7 @@ void load_open_settings(void *sesskey, Conf *conf)
     gppi(sesskey, "UTF8Override", 1, conf, CONF_utf8_override);
     gppi(sesskey, "UTF8InitMode", 0, conf, CONF_utf8_initmode);
     gpps(sesskey, "Printer", "", conf, CONF_printer);
+    gppi(sesskey, "PrintClip", 0, conf, CONF_printclip);
     gppi(sesskey, "CapsLockCyr", 0, conf, CONF_xlat_capslockcyr);
     gppi(sesskey, "ScrollBar", 1, conf, CONF_scrollbar);
     gppi(sesskey, "ScrollBarFullScreen", 0, conf, CONF_scrollbar_in_fullscreen);
