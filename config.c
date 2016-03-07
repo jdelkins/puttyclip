@@ -11,6 +11,7 @@
 #include "storage.h"
 
 #define PRINTER_DISABLED_STRING "None (printing disabled)"
+#define PRINT_TO_CLIPBOARD_STRING "Windows clipboard"
 
 #define HOST_BOX_TITLE "Host Name (or IP address)"
 #define PORT_BOX_TITLE "Port"
@@ -483,21 +484,30 @@ static void printerbox_handler(union control *ctrl, void *dlg,
 	if (ctrl->editbox.has_list) {
 	    dlg_listbox_clear(ctrl, dlg);
 	    dlg_listbox_add(ctrl, dlg, PRINTER_DISABLED_STRING);
+	    dlg_listbox_add(ctrl, dlg, PRINT_TO_CLIPBOARD_STRING);
 	    pe = printer_start_enum(&nprinters);
 	    for (i = 0; i < nprinters; i++)
 		dlg_listbox_add(ctrl, dlg, printer_get_name(pe, i));
 	    printer_finish_enum(pe);
 	}
 	printer = conf_get_str(conf, CONF_printer);
-	if (!printer)
+	if (conf_get_int(conf, CONF_printclip))
+	    printer = PRINT_TO_CLIPBOARD_STRING;
+	else if (!printer)
 	    printer = PRINTER_DISABLED_STRING;
 	dlg_editbox_set(ctrl, dlg, printer);
 	dlg_update_done(ctrl, dlg);
     } else if (event == EVENT_VALCHANGE) {
 	char *printer = dlg_editbox_get(ctrl, dlg);
+	int printclip = 0;
 	if (!strcmp(printer, PRINTER_DISABLED_STRING))
 	    printer[0] = '\0';
+	else if (!strcmp(printer, PRINT_TO_CLIPBOARD_STRING)) {
+	    printer[0] = '\0';
+	    printclip = 1;
+	}
 	conf_set_str(conf, CONF_printer, printer);
+	conf_set_int(conf, CONF_printclip, printclip);
 	sfree(printer);
     }
 }

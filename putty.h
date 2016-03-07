@@ -795,6 +795,7 @@ void cleanup_exit(int);
     X(INT, NONE, window_border) \
     X(STR, NONE, answerback) \
     X(STR, NONE, printer) \
+    X(INT, NONE, printclip) \
     X(INT, NONE, arabicshaping) \
     X(INT, NONE, bidi) \
     /* Colour options */ \
