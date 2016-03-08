@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# Pipe standard input (or specified files) to the remote printer.
+# Accepts all the cat(1) options.
+# Can be used with a modified putty client to pipe output to the
+# Windows clipboard.  See <http://www.spinellis.gr/sw/windows/puttyclip>.
+#
+# Written by Diomidis Spinellis, July 2003.
+# This script is hereby placed into the public domain.
+
+# Start remote printing
+if [[ -z "$TMUX" ]]; then
+	echo -ne "\e[5i"
+else
+	echo -ne "\ePtmux;\e\e[5i"
+fi
+#        ^ The character in this (^) position and the
+# corresponding character in the last line are a 
+# literal escape code (ESC - \033 - \x1b - decimal character 27).
+# They are separated from the following [5i / [4i string by a quote
+# sequence so that listing this script will not trigger the remote
+# printing function.
+
+# Copy standard input or specified files to the remote printer.
+cat $*
+
+# End remote printing
+if [[ -z "$TMUX" ]]; then
+	echo -ne "\e[4i"
+else
+	echo -ne "\e\e[4i\e\\"
+fi
