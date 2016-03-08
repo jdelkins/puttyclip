@@ -4,9 +4,12 @@
 # Accepts all the cat(1) options.
 # Can be used with a modified putty client to pipe output to the
 # Windows clipboard.  See <http://www.spinellis.gr/sw/windows/puttyclip>.
+# Updated version: <https://github.com/jdelkins/puttyclip>
 #
 # Written by Diomidis Spinellis, July 2003.
 # This script is hereby placed into the public domain.
+#
+# Modified to support tmux by Joel Elkins <joel@elkins.com>, March 2016
 
 # Start remote printing
 if [[ -z "$TMUX" ]]; then
@@ -14,12 +17,6 @@ if [[ -z "$TMUX" ]]; then
 else
 	echo -ne "\ePtmux;\e\e[5i"
 fi
-#        ^ The character in this (^) position and the
-# corresponding character in the last line are a 
-# literal escape code (ESC - \033 - \x1b - decimal character 27).
-# They are separated from the following [5i / [4i string by a quote
-# sequence so that listing this script will not trigger the remote
-# printing function.
 
 # Copy standard input or specified files to the remote printer.
 cat $*
