@@ -202,7 +202,7 @@ struct terminal_tag {
 #define ANSI(x,y)	((x)+((y)<<8))
 #define ANSI_QUE(x)	ANSI(x,TRUE)
 
-#define OSC_STR_MAX 2048
+#define OSC_STR_MAX 32768
     int osc_strlen;
     char osc_string[OSC_STR_MAX + 1];
     int osc_w;
