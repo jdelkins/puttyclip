@@ -193,6 +193,7 @@ struct terminal_tag {
 	SEEN_CSI,
 	SEEN_OSC,
 	SEEN_OSC_W,
+	SEEN_OSC_52,
 
 	DO_CTRLS,
 
