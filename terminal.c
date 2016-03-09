@@ -2902,6 +2902,8 @@ static void do_osc(Terminal *term)
 		unsigned char buf[OSC_STR_MAX];
 		int  decode_len;
 		decode_len = b64_pton(term->osc_string, buf, OSC_STR_MAX);
+		debug(("%s\n", term->osc_string));
+		debug(("%s\n", buf));
 		clipboard_init();
 		clipboard_data(buf, decode_len);
 		clipboard_copy();
@@ -5065,6 +5067,8 @@ static void term_out(Terminal *term)
 		    term->osc_w = TRUE;
 		    break;
 		  case ';':
+		    if (term->esc_nargs == 1 && term->esc_args[0] == 52)
+			    term->termstate = SEEN_OSC_52; /* clibpard manipulation */
 		    if (term->esc_nargs < ARGS_MAX)
 			term->esc_args[term->esc_nargs++] = ARG_DEFAULT;
 		    break;
@@ -5216,7 +5220,34 @@ static void term_out(Terminal *term)
 		else if (term->dcs_strlen < DCS_STR_MAX)
 		    term->dcs_string[term->dcs_strlen++] = (char)c;
 		break;
-
+	      case SEEN_OSC_52:
+		switch (c) {
+		  case 'c':
+		  case 'p':
+		  case 's':
+		  case '0':
+		  case '1':
+		  case '2':
+		  case '3':
+		  case '4':
+		  case '5':
+		  case '6':
+		  case '7':
+			  /* the first parameter defines the cut buffer to use
+			   * in X. Here, we don't care other than to ensure
+			   * conformance with the spec. */
+			  term->esc_args[term->esc_nargs - 1] = (char) c;
+			  break;
+		  case ';':
+			  term->termstate = OSC_STRING;
+			  term->osc_strlen = 0;
+			  break;
+		  default:
+			  /* invalid sequence */
+			  term->termstate = TOPLEVEL;
+			  break;
+		}
+		break;
 	      case SEEN_OSC_P:
 		{
 		    int max = (term->osc_strlen == 0 ? 21 : 15);
