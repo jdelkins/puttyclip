@@ -11,6 +11,7 @@
 #include <assert.h>
 #include "putty.h"
 #include "terminal.h"
+#include "b64_pton.h"
 
 #define poslt(p1,p2) ( (p1).y < (p2).y || ( (p1).y == (p2).y && (p1).x < (p2).x ) )
 #define posle(p1,p2) ( (p1).y < (p2).y || ( (p1).y == (p2).y && (p1).x <= (p2).x ) )
@@ -111,6 +112,9 @@ static void scroll(Terminal *, int, int, int, int);
 #ifdef OPTIMISE_SCROLL
 static void scroll_display(Terminal *, int, int, int);
 #endif /* OPTIMISE_SCROLL */
+static void clipboard_init(void);
+static void clipboard_data(void *buff,  int len);
+static void clipboard_copy(void);
 
 static termline *newline(Terminal *term, int cols, int bce)
 {
@@ -2674,6 +2678,16 @@ static void do_osc(Terminal *term)
 	    if (!term->no_remote_wintitle)
 		set_title(term->frontend, term->osc_string);
 	    break;
+	  case 52:
+	    {
+		unsigned char buf[OSC_STR_MAX];
+		int  decode_len;
+		decode_len = b64_pton(term->osc_string, buf, OSC_STR_MAX);
+		clipboard_init();
+		clipboard_data(buf, decode_len);
+		clipboard_copy();
+	    }
+	    break;
 	}
     }
 }
@@ -3371,7 +3385,8 @@ static void term_out(Terminal *term)
 		    /* Compatibility is nasty here, xterm, linux, decterm yuk! */
 		    compatibility(OTHER);
 		    term->termstate = SEEN_OSC;
-		    term->esc_args[0] = 0;
+		    term->esc_nargs = 1;
+		    term->esc_args[0] = ARG_DEFAULT;
 		    break;
 		  case '7':		/* DECSC: save cursor */
 		    compatibility(VT100);
@@ -4429,6 +4444,10 @@ static void term_out(Terminal *term)
 		    term->termstate = SEEN_OSC_W;
 		    term->osc_w = TRUE;
 		    break;
+		  case ';':
+		    if (term->esc_nargs < ARGS_MAX)
+			term->esc_args[term->esc_nargs++] = ARG_DEFAULT;
+		    break;
 		  case '0':
 		  case '1':
 		  case '2':
@@ -4439,11 +4458,19 @@ static void term_out(Terminal *term)
 		  case '7':
 		  case '8':
 		  case '9':
-		    if (term->esc_args[0] <= UINT_MAX / 10 &&
-			term->esc_args[0] * 10 <= UINT_MAX - c - '0')
-			term->esc_args[0] = 10 * term->esc_args[0] + c - '0';
-		    else
-			term->esc_args[0] = UINT_MAX;
+		    if (term->esc_nargs <= ARGS_MAX) {
+			if (term->esc_args[term->esc_nargs - 1] == ARG_DEFAULT)
+			    term->esc_args[term->esc_nargs - 1] = 0;
+			if (term->esc_args[term->esc_nargs - 1] <=
+			    UINT_MAX / 10 &&
+			    term->esc_args[term->esc_nargs - 1] * 10 <=
+			    UINT_MAX - c - '0')
+			    term->esc_args[term->esc_nargs - 1] =
+			        10 * term->esc_args[term->esc_nargs - 1] +
+			        c - '0';
+			else
+			    term->esc_args[term->esc_nargs - 1] = UINT_MAX;
+		    }
 		    break;
 		  case 'L':
 		    /*
