@@ -2922,13 +2922,13 @@ static char *clip_b, *clip_bp;		/* Buffer, pointer to buffer insertion point */
 static size_t clip_bsiz, clip_remsiz;	/* Buffer, size, remaining size */
 static size_t clip_total;		/* Total read */
 
-#define CLIP_CHUNK 4096
+#define CLIP_CHUNK 4194304
 
 static void clipboard_init(void)
 {
     if (clip_b)
 	sfree(clip_b);
-    clip_bp = clip_b = smalloc(clip_remsiz = clip_bsiz = CLIP_CHUNK);
+    clip_bp = clip_b = (char *) smalloc(clip_remsiz = clip_bsiz = CLIP_CHUNK);
     clip_total = 0;
 }
 
@@ -2952,19 +2952,22 @@ static void clipboard_copy(void)
     if (!OpenClipboard(NULL))
 	return; // error("Unable to open the clipboard");
     if (!EmptyClipboard()) {
-	CloseClipboard(); 
+	CloseClipboard();
 	return; // error("Unable to empty the clipboard");
     }
 
-    hglb = GlobalAlloc(GMEM_DDESHARE, clip_total + 1);
-    if (hglb == NULL) { 
-	CloseClipboard(); 
+    hglb = GlobalAlloc(GMEM_DDESHARE, 2 * (clip_total + 1));
+    if (hglb == NULL) {
+	CloseClipboard();
 	return; // error("Unable to allocate clipboard memory");
     }
-    memcpy(hglb, clip_b, clip_total);
-    ((char *)hglb)[clip_total] = '\0';
-    SetClipboardData(CF_TEXT, hglb); 
-    CloseClipboard(); 
+    WCHAR *pchData = (WCHAR *) GlobalLock(hglb);
+    if (pchData) {
+	    MultiByteToWideChar(CP_UTF8, 0, clip_b, clip_total, pchData, 2 * (clip_total + 1));
+	    GlobalUnlock(hglb);
+	    SetClipboardData(CF_UNICODETEXT, hglb);
+    }
+    CloseClipboard();
 }
 
 /*
