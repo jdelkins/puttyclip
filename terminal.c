@@ -119,8 +119,8 @@ static void scroll_display(Terminal *, int, int, int);
 static void set_truecolour_attr(Terminal *, int, int, int, int);
 static void palette_conv(Terminal *, int fg, unsigned colnum);
 static void clipboard_init(void);
-static void clipboard_data(void *buff,  int len);
-static void clipboard_copy(void);
+static void clipboard_data(Terminal *term, void *buff,  int len);
+static void clipboard_copy(Terminal *term);
 
 static termline *newline(Terminal *term, int cols, int bce)
 {
@@ -2899,14 +2899,19 @@ static void do_osc(Terminal *term)
 	    break;
 	  case 52:
 	    {
-		unsigned char buf[OSC_STR_MAX];
+		// decode the base64 string
+		uint8_t *buf;
 		int  decode_len;
-		decode_len = b64_pton(term->osc_string, buf, OSC_STR_MAX);
-		debug(("%s\n", term->osc_string));
-		debug(("%s\n", buf));
+
+		// we should need only 3/4 of osc_strlen
+		buf = snewn(term->osc_strlen, uint8_t);
+		decode_len = b64_pton(term->osc_string, buf, term->osc_strlen);
+
 		clipboard_init();
-		clipboard_data(buf, decode_len);
-		clipboard_copy();
+		clipboard_data(term, buf, decode_len);
+		clipboard_copy(term);
+
+		sfree(buf);
 	    }
 	    break;
 	}
@@ -2918,56 +2923,44 @@ static void do_osc(Terminal *term)
  * Diomidis Spinellis, June 2003
  * JDE, March 2016
  */
-static char *clip_b, *clip_bp;		/* Buffer, pointer to buffer insertion point */
-static size_t clip_bsiz, clip_remsiz;	/* Buffer, size, remaining size */
+static wchar_t *clip_b, *clip_bp;	/* Buffer, pointer to buffer insertion point */
+static size_t clip_bsiz;		/* Buffer, size, remaining size */
 static size_t clip_total;		/* Total read */
 
-#define CLIP_CHUNK 4194304
+#define CLIP_CHUNK 4096
 
 static void clipboard_init(void)
 {
     if (clip_b)
 	sfree(clip_b);
-    clip_bp = clip_b = (char *) smalloc(clip_remsiz = clip_bsiz = CLIP_CHUNK);
+    clip_bp = clip_b = snewn(clip_bsiz = CLIP_CHUNK, wchar_t);
     clip_total = 0;
 }
 
-static void clipboard_data(void *buff,  int len)
+static void clipboard_data(Terminal *term, void *buff, int len)
 {
-    memcpy(clip_bp, buff, len);
-    clip_remsiz -= len;
-    clip_total += len;
-    clip_bp += len;
-    if (clip_remsiz < CLIP_CHUNK) {
-	clip_b = srealloc(clip_b, clip_bsiz *= 2);
-	clip_remsiz = clip_bsiz - clip_total;
-	clip_bp = clip_b + clip_total;
+    int  wbuf_size;
+
+    // calculate required size of converted string
+    wbuf_size = mb_to_wc(term->ucsdata->line_codepage, 0, buff, len, NULL, 0);
+    debug(("clipboard_data: %d bytes, %d wchars\n", len, wbuf_size));
+    // expand buffer if necessary
+    if (clip_total + wbuf_size >= clip_bsiz) {
+	clip_b = sresize(clip_b, clip_bsiz + wbuf_size + CLIP_CHUNK, wchar_t);
+	clip_bsiz += wbuf_size + CLIP_CHUNK;
+	clip_bp = clip_b + (sizeof(wchar_t) * clip_total);
     }
+    // actually copy the data into the buffer
+    wbuf_size = mb_to_wc(term->ucsdata->line_codepage, 0, buff, len, clip_bp, (clip_bsiz - clip_total));
+    clip_total += wbuf_size;
+    clip_bp += sizeof(wchar_t) * wbuf_size;
+    /* clip_bp[0] = L'\0'; */
 }
 
-static void clipboard_copy(void)
+static void clipboard_copy(Terminal *term)
 {
-    HANDLE hglb;
-
-    if (!OpenClipboard(NULL))
-	return; // error("Unable to open the clipboard");
-    if (!EmptyClipboard()) {
-	CloseClipboard();
-	return; // error("Unable to empty the clipboard");
-    }
-
-    hglb = GlobalAlloc(GMEM_DDESHARE, 2 * (clip_total + 1));
-    if (hglb == NULL) {
-	CloseClipboard();
-	return; // error("Unable to allocate clipboard memory");
-    }
-    WCHAR *pchData = (WCHAR *) GlobalLock(hglb);
-    if (pchData) {
-	    MultiByteToWideChar(CP_UTF8, 0, clip_b, clip_total, pchData, 2 * (clip_total + 1));
-	    GlobalUnlock(hglb);
-	    SetClipboardData(CF_UNICODETEXT, hglb);
-    }
-    CloseClipboard();
+   //void write_clip(void *frontend, wchar_t * data, int *attr, int len, int must_deselect)
+    write_clip(term->frontend, clip_b, NULL, clip_total, TRUE);
 }
 
 /*
@@ -2991,7 +2984,7 @@ static void term_print_flush(Terminal *term)
 	if (len > size-5)
 	    len = size-5;
 	if (conf_get_int(term->conf, CONF_printclip))
-	    clipboard_data(data, len);
+	    clipboard_data(term, data, len);
 	else
 	    printer_job_data(term->print_job, data, len);
 	bufchain_consume(&term->printer_buf, len);
@@ -3015,14 +3008,14 @@ static void term_print_finish(Terminal *term)
 	    break;
 	} else {
 	    if (conf_get_int(term->conf, CONF_printclip))
-		clipboard_data(&c, 1);
+		clipboard_data(term, &c, 1);
 	    else
 		printer_job_data(term->print_job, &c, 1);
 	    bufchain_consume(&term->printer_buf, 1);
 	}
     }
     if (conf_get_int(term->conf, CONF_printclip))
-	clipboard_copy();
+	clipboard_copy(term);
     else
 	printer_finish_job(term->print_job);
     term->print_job = NULL;
