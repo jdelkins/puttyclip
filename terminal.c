@@ -120,7 +120,10 @@ static void set_truecolour_attr(Terminal *, int, int, int, int);
 static void palette_conv(Terminal *, int fg, unsigned colnum);
 static void clipboard_init(void);
 static void clipboard_data(Terminal *term, void *buff,  int len);
-static void clipboard_copy(Terminal *term);
+static void osc_string_init(Terminal *term);
+static void osc_string_add(Terminal *term, char *buf,  int len);
+static void osc_string_add_char(Terminal *term, char c);
+static void clipboard_copy(Terminal *term, char *buf, int len);
 
 static termline *newline(Terminal *term, int cols, int bce)
 {
@@ -1395,6 +1398,8 @@ static void power_on(Terminal *term, int clear)
 	for (i = 0; i < 256; i++)
 	    term->wordness[i] = conf_get_int_int(term->conf, CONF_wordness, i);
     }
+    term->osc_string = NULL;
+    term->osc_strlen = 0;
     if (clear || term->curs.x<0 || term->curs.y<0 ||
 	term->curs.x >= term->cols || term->curs.y >= term->rows ) {
 	if (term->screen) {
@@ -2906,61 +2911,59 @@ static void do_osc(Terminal *term)
 		// we should need only 3/4 of osc_strlen
 		buf = snewn(term->osc_strlen, uint8_t);
 		decode_len = b64_pton(term->osc_string, buf, term->osc_strlen);
-
-		clipboard_init();
-		clipboard_data(term, buf, decode_len);
-		clipboard_copy(term);
-
+		clipboard_copy(term, (char *) buf, decode_len);
 		sfree(buf);
 	    }
 	    break;
 	}
     }
+    sfree(term->osc_string);
+    term->osc_string = NULL;
+    term->osc_strlen = 0;
+}
+
+static void osc_string_init(Terminal *term)
+{
+    if (term->osc_string)
+	sfree(term->osc_string);
+    term->osc_string = snewn(term->osc_bufsize = OSC_STR_CHUNK, char);
+    term->osc_strlen = 0;
+}
+
+static void osc_string_add_char(Terminal *term, char c)
+{
+	osc_string_add(term, &c, 1);
+}
+
+static void osc_string_add(Terminal *term, char *buf, int len)
+{
+    // expand buffer if necessary
+    if (term->osc_strlen + len + 1 >= term->osc_bufsize) {
+	int newsize = term->osc_bufsize + max(len + 1, OSC_STR_CHUNK);
+	term->osc_string = sresize(term->osc_string, newsize, char);
+	term->osc_bufsize = newsize;
+	//debug(("resized osc buffer: %d\n", term->osc_bufsize));
+    }
+    // actually copy the data into the buffer
+    memcpy(&term->osc_string[term->osc_strlen], buf, len);
+    term->osc_strlen += len;
 }
 
 /*
  * Windows clipboard support
- * Diomidis Spinellis, June 2003
  * JDE, March 2016
  */
-static wchar_t *clip_b, *clip_bp;	/* Buffer, pointer to buffer insertion point */
-static size_t clip_bsiz;		/* Buffer, size, remaining size */
-static size_t clip_total;		/* Total read */
-
-#define CLIP_CHUNK 4096
-
-static void clipboard_init(void)
+static void clipboard_copy(Terminal *term, char *buf, int size)
 {
-    if (clip_b)
-	sfree(clip_b);
-    clip_bp = clip_b = snewn(clip_bsiz = CLIP_CHUNK, wchar_t);
-    clip_total = 0;
-}
+    wchar_t *wbuf;
+    int      wbuf_size;
 
-static void clipboard_data(Terminal *term, void *buff, int len)
-{
-    int  wbuf_size;
-
-    // calculate required size of converted string
-    wbuf_size = mb_to_wc(term->ucsdata->line_codepage, 0, buff, len, NULL, 0);
-    debug(("clipboard_data: %d bytes, %d wchars\n", len, wbuf_size));
-    // expand buffer if necessary
-    if (clip_total + wbuf_size >= clip_bsiz) {
-	clip_b = sresize(clip_b, clip_bsiz + wbuf_size + CLIP_CHUNK, wchar_t);
-	clip_bsiz += wbuf_size + CLIP_CHUNK;
-	clip_bp = clip_b + (sizeof(wchar_t) * clip_total);
-    }
-    // actually copy the data into the buffer
-    wbuf_size = mb_to_wc(term->ucsdata->line_codepage, 0, buff, len, clip_bp, (clip_bsiz - clip_total));
-    clip_total += wbuf_size;
-    clip_bp += sizeof(wchar_t) * wbuf_size;
-    /* clip_bp[0] = L'\0'; */
-}
-
-static void clipboard_copy(Terminal *term)
-{
-   //void write_clip(void *frontend, wchar_t * data, int *attr, int len, int must_deselect)
-    write_clip(term->frontend, clip_b, NULL, clip_total, TRUE);
+    wbuf_size = mb_to_wc(term->ucsdata->line_codepage, 0, buf, size, NULL, 0) + 1;
+    wbuf = snewn(wbuf_size, wchar_t);
+    //debug(("clipboard_copy: osc_strlen = %d, wbuf_size = %d\n", size, wbuf_size));
+    mb_to_wc(term->ucsdata->line_codepage, 0, buf, size, wbuf, wbuf_size);
+    write_clip(term->frontend, wbuf, NULL, wbuf_size+1, TRUE);
+    sfree(wbuf);
 }
 
 /*
@@ -2970,7 +2973,7 @@ static void term_print_setup(Terminal *term, char *printer)
 {
     bufchain_clear(&term->printer_buf);
     if (conf_get_int(term->conf, CONF_printclip))
-	clipboard_init();
+	osc_string_init(term);
     else
 	term->print_job = printer_start_job(printer);
 }
@@ -2984,7 +2987,7 @@ static void term_print_flush(Terminal *term)
 	if (len > size-5)
 	    len = size-5;
 	if (conf_get_int(term->conf, CONF_printclip))
-	    clipboard_data(term, data, len);
+	    osc_string_add(term, data, len);
 	else
 	    printer_job_data(term->print_job, data, len);
 	bufchain_consume(&term->printer_buf, len);
@@ -3008,15 +3011,18 @@ static void term_print_finish(Terminal *term)
 	    break;
 	} else {
 	    if (conf_get_int(term->conf, CONF_printclip))
-		clipboard_data(term, &c, 1);
+		osc_string_add(term, &c, 1);
 	    else
 		printer_job_data(term->print_job, &c, 1);
 	    bufchain_consume(&term->printer_buf, 1);
 	}
     }
-    if (conf_get_int(term->conf, CONF_printclip))
-	clipboard_copy(term);
-    else
+    if (conf_get_int(term->conf, CONF_printclip)) {
+	clipboard_copy(term, term->osc_string, term->osc_strlen);
+	sfree(term->osc_string);
+	term->osc_string = NULL;
+	term->osc_strlen = 0;
+    } else
 	printer_finish_job(term->print_job);
     term->print_job = NULL;
     term->printing = term->only_printing = FALSE;
@@ -5103,8 +5109,9 @@ static void term_out(Terminal *term)
 		    }
 		    /* else fall through */
 		  default:
+		    osc_string_init(term);
 		    term->termstate = OSC_STRING;
-		    term->osc_strlen = 0;
+		    break;
 		}
 		break;
 	      case OSC_STRING:
@@ -5120,6 +5127,7 @@ static void term_out(Terminal *term)
 		 */
 		if (c == '\012' || c == '\015') {
 		    term->termstate = TOPLEVEL;
+
 		} else if (c == 0234 || c == '\007') {
 		    /*
 		     * These characters terminate the string; ST and BEL
@@ -5132,7 +5140,7 @@ static void term_out(Terminal *term)
 		    term->termstate = TOPLEVEL;
 		} else if (c == '\033')
 		    term->termstate = OSC_MAYBE_ST;
-		else if (term->osc_strlen < OSC_STR_MAX-4) {
+		else {
 		    /* c is a unicode character make it UTF-8 in the string. */
 		    /* First resolve any Line/Direct character sets. */
 		    switch (c & CSET_MASK) {
@@ -5155,7 +5163,7 @@ static void term_out(Terminal *term)
 			break;
 		    }
 		    if (c<128)
-			term->osc_string[term->osc_strlen++] = (char)c;
+			osc_string_add_char((char)c);
 		    else {
 			int c1, c2, c3, c4;
 			c2 = (c>>6);
@@ -5166,17 +5174,17 @@ static void term_out(Terminal *term)
 			c3 = c3 - (c4<<6);
 
 			if (c < 2048) {
-			    term->osc_string[term->osc_strlen++] = (char)c2+192;
-			    term->osc_string[term->osc_strlen++] = (char)c1+128;
+			    osc_string_add_char((char)c2+192);
+			    osc_string_add_char((char)c1+128);
 			} else if (c < 65536) {
-			    term->osc_string[term->osc_strlen++] = (char)c3+224;
-			    term->osc_string[term->osc_strlen++] = (char)c2+128;
-			    term->osc_string[term->osc_strlen++] = (char)c1+128;
+			    osc_string_add_char((char)c3+224);
+			    osc_string_add_char((char)c2+128);
+			    osc_string_add_char((char)c1+128);
 			} else {
-			    term->osc_string[term->osc_strlen++] = (char)c4+240;
-			    term->osc_string[term->osc_strlen++] = (char)c3+128;
-			    term->osc_string[term->osc_strlen++] = (char)c2+128;
-			    term->osc_string[term->osc_strlen++] = (char)c1+128;
+			    osc_string_add_char((char)c4+240);
+			    osc_string_add_char((char)c3+128);
+			    osc_string_add_char((char)c2+128);
+			    osc_string_add_char((char)c1+128);
 			}
 		    }
 		}
@@ -5229,19 +5237,19 @@ static void term_out(Terminal *term)
 		  case '5':
 		  case '6':
 		  case '7':
-			  /* the first parameter defines the cut buffer to use
-			   * in X. Here, we don't care other than to ensure
-			   * conformance with the spec. */
-			  term->esc_args[term->esc_nargs - 1] = (char) c;
-			  break;
+		    /* the first parameter defines the cut buffer to use
+		     * in X. Here, we don't care other than to ensure
+		     * conformance with the spec. */
+		    term->esc_args[term->esc_nargs - 1] = (char) c;
+		    break;
 		  case ';':
-			  term->termstate = OSC_STRING;
-			  term->osc_strlen = 0;
-			  break;
+		    osc_string_init(term);
+		    term->termstate = OSC_STRING;
+		    break;
 		  default:
-			  /* invalid sequence */
-			  term->termstate = TOPLEVEL;
-			  break;
+		    /* invalid sequence */
+		    term->termstate = TOPLEVEL;
+		    break;
 		}
 		break;
 	      case SEEN_OSC_P:
@@ -5258,7 +5266,7 @@ static void term_out(Terminal *term)
 			term->termstate = OSC_STRING;
 			break;
 		    }
-		    term->osc_string[term->osc_strlen++] = val;
+		    osc_string_add_char(term, (char) val);
 		    if (term->osc_strlen >= 7) {
 			palette_set(term->frontend, term->osc_string[0],
 				    term->osc_string[1] * 16 + term->osc_string[2],
@@ -5266,6 +5274,9 @@ static void term_out(Terminal *term)
 				    term->osc_string[5] * 16 + term->osc_string[6]);
 			term_invalidate(term);
 			term->termstate = TOPLEVEL;
+			sfree(term->osc_string);
+			term->osc_string = NULL;
+			term->osc_strlen = 0;
 		    }
 		}
 		break;
@@ -5288,8 +5299,9 @@ static void term_out(Terminal *term)
 			term->esc_args[0] = UINT_MAX;
 		    break;
 		  default:
+		    osc_string_init(term);
 		    term->termstate = OSC_STRING;
-		    term->osc_strlen = 0;
+		    break;
 		}
 		break;
 	      case VT52_ESC:
