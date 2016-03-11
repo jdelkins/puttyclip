@@ -2735,7 +2735,8 @@ static void clipboard_copy(Terminal *term, char *buf, int size)
     wbuf = snewn(wbuf_size, wchar_t);
     //debug(("clipboard_copy: osc_strlen = %d, wbuf_size = %d\n", size, wbuf_size));
     mb_to_wc(term->ucsdata->line_codepage, 0, buf, size, wbuf, wbuf_size);
-    write_clip(term->frontend, wbuf, NULL, wbuf_size+1, TRUE);
+    wbuf[wbuf_size - 1] = L'\0';
+    write_clip(term->frontend, wbuf, NULL, wbuf_size, TRUE);
     sfree(wbuf);
 }
 
