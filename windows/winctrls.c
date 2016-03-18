@@ -1197,6 +1197,7 @@ void winctrl_add_shortcuts(struct dlgparam *dp, struct winctrl *c)
     for (i = 0; i < lenof(c->shortcuts); i++)
 	if (c->shortcuts[i] != NO_SHORTCUT) {
 	    unsigned char s = tolower((unsigned char)c->shortcuts[i]);
+	    debug(("label = %s, type = %d, shortcut = %c\n", c->ctrl->generic.label, c->ctrl->generic.type, s));
 	    assert(!dp->shortcuts[s]);
 	    dp->shortcuts[s] = TRUE;
 	}
@@ -1630,8 +1631,8 @@ void winctrl_layout(struct dlgparam *dp, struct winctrls *wc,
 				      ctrl->fileselect.shortcut);
 	    shortcuts[nshortcuts++] = ctrl->fileselect.shortcut;
 	    editbutton(&pos, escaped, base_id, base_id+1,
-		       "Bro&wse...", base_id+2);
-	    shortcuts[nshortcuts++] = 'w';
+		       "Browse...", base_id+2);
+	    //shortcuts[nshortcuts++] = 'w';
 	    sfree(escaped);
 	    break;
 	  case CTRL_FONTSELECT:
@@ -1650,8 +1651,8 @@ void winctrl_layout(struct dlgparam *dp, struct winctrls *wc,
 				      ctrl->directoryselect.shortcut);
 	    shortcuts[nshortcuts++] = ctrl->directoryselect.shortcut;
 	    editbutton(&pos, escaped, base_id, base_id+1,
-		       "Bro&wse...", base_id+2);
-	    shortcuts[nshortcuts++] = 'w';
+		       "Browse...", base_id+2);
+	    //shortcuts[nshortcuts++] = 'w';
 	    sfree(escaped);
 	    break;
 	  default:
