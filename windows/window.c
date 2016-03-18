@@ -1158,6 +1158,7 @@ static void update_mouse_pointer(void)
 	force_visible = TRUE;
 	break;
       default:
+	curstype = IDC_ARROW;
 	assert(0);
     }
     {
@@ -3254,7 +3255,7 @@ often turned off under X.
 		     */
 		    term_seen_key_event(term);
 		    if (ldisc)
-			ldisc_send(ldisc, buf, len, 1);
+			ldisc_send(ldisc, (const char *) buf, len, 1);
 		    show_mouseptr(0);
 		}
 	    }
@@ -3328,7 +3329,7 @@ often turned off under X.
 	    buf[0] = wParam >> 8;
 	    term_seen_key_event(term);
 	    if (ldisc)
-		lpage_send(ldisc, kbd_codepage, buf, 2, 1);
+		lpage_send(ldisc, kbd_codepage, (const char *)buf, 2, 1);
 	} else {
 	    char c = (unsigned char) wParam;
 	    term_seen_key_event(term);
@@ -4721,7 +4722,7 @@ static int TranslateKey(UINT message, WPARAM wParam, LPARAM lParam,
 		break;
 	    }
 	    if (xkey) {
-		p += format_arrow_key(p, term, xkey, shift_state);
+		p += format_arrow_key((char *)p, term, xkey, shift_state);
 		return p - output;
 	    }
 	}
