@@ -17,6 +17,11 @@
 #include "win_res.h"
 #include "winsecur.h"
 
+int xyz_Process(Backend *back, void *backhandle, Terminal *term);
+void xyz_ReceiveInit(Terminal *term);
+void xyz_StartSending(Terminal *term);
+void xyz_Cancel(Terminal *term);
+
 #if !defined(NO_MULTIMON) && !defined(NO_MULTIMON_H)
 /* This is needed to provide the stubs for running on Windows 95 */
 #define COMPILE_MULTIMON_STUBS
@@ -47,6 +52,10 @@
 #define IDM_FULLSCREEN	0x0180
 #define IDM_PASTE     0x0190
 #define IDM_SPECIALSEP 0x0200
+
+#define IDM_XYZSTART  0x0200
+#define IDM_XYZUPLOAD 0x0210
+#define IDM_XYZABORT  0x0220
 
 #define IDM_SPECIAL_MIN 0x0400
 #define IDM_SPECIAL_MAX 0x0800
@@ -99,6 +108,8 @@ static void make_full_screen(void);
 static void clear_full_screen(void);
 static void flip_full_screen(void);
 static int process_clipdata(HGLOBAL clipdata, int unicode);
+
+void xyz_updateMenuItems(Terminal *term);
 
 /* Window layout information */
 static void reset_window(int);
@@ -846,6 +857,13 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
 			   == RESIZE_DISABLED) ? MF_GRAYED : MF_ENABLED,
 		       IDM_FULLSCREEN, "&Full Screen");
 	    AppendMenu(m, MF_SEPARATOR, 0, 0);
+	    AppendMenu(m, term->xyz_transfering?MF_GRAYED:MF_ENABLED,
+		       IDM_XYZSTART, "&Zmodem Receive");
+	    AppendMenu(m, term->xyz_transfering?MF_GRAYED:MF_ENABLED,
+		       IDM_XYZUPLOAD, "Zmodem &Upload");
+	    AppendMenu(m, !term->xyz_transfering?MF_GRAYED:MF_ENABLED,
+		       IDM_XYZABORT, "Zmodem &Abort");
+	    AppendMenu(m, MF_SEPARATOR, 0, 0);
 	    if (has_help())
 		AppendMenu(m, MF_ENABLED, IDM_HELP, "&Help");
 	    str = dupprintf("&About %s", appname);
@@ -930,6 +948,9 @@ int WINAPI WinMain(HINSTANCE inst, HINSTANCE prev, LPSTR cmdline, int show)
 		DispatchMessageW(&msg);
 		expire_timer_context(&rescue_callback);
 	    }
+
+	    if (xyz_Process(back, backhandle, term))
+		continue;
 
             /*
              * WM_NETEVENT messages seem to jump ahead of others in
@@ -2525,6 +2546,18 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT message,
 	    break;
 	  case IDM_FULLSCREEN:
 	    flip_full_screen();
+	    break;
+	  case IDM_XYZSTART:
+	    xyz_ReceiveInit(term);
+	    xyz_updateMenuItems(term);
+	    break;
+	  case IDM_XYZUPLOAD:
+	    xyz_StartSending(term);
+	    xyz_updateMenuItems(term);
+	    break;
+	  case IDM_XYZABORT:
+	    xyz_Cancel(term);
+	    xyz_updateMenuItems(term);
 	    break;
 	  default:
 	    if (wParam >= IDM_SAVED_MIN && wParam < IDM_SAVED_MAX) {
@@ -5952,4 +5985,15 @@ void agent_schedule_callback(void (*callback)(void *, void *, int),
     c->data = data;
     c->len = len;
     PostMessage(hwnd, WM_AGENT_CALLBACK, 0, (LPARAM)c);
+}
+
+void xyz_updateMenuItems(Terminal *term)
+{
+    HMENU m = GetSystemMenu(hwnd, FALSE);
+    EnableMenuItem(m, IDM_XYZSTART,
+		   term->xyz_transfering?MF_GRAYED:MF_ENABLED);
+    EnableMenuItem(m, IDM_XYZUPLOAD,
+		   term->xyz_transfering?MF_GRAYED:MF_ENABLED);
+    EnableMenuItem(m, IDM_XYZABORT,
+		   !term->xyz_transfering?MF_GRAYED:MF_ENABLED);
 }
