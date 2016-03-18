@@ -1197,7 +1197,6 @@ void winctrl_add_shortcuts(struct dlgparam *dp, struct winctrl *c)
     for (i = 0; i < lenof(c->shortcuts); i++)
 	if (c->shortcuts[i] != NO_SHORTCUT) {
 	    unsigned char s = tolower((unsigned char)c->shortcuts[i]);
-	    debug(("label = %s, type = %d, shortcut = %c\n", c->ctrl->generic.label, c->ctrl->generic.type, s));
 	    assert(!dp->shortcuts[s]);
 	    dp->shortcuts[s] = TRUE;
 	}
