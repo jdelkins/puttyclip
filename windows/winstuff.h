@@ -251,6 +251,8 @@ GLOBAL void *logctx;
 			      "All Files (*.*)\0*\0\0\0")
 #define FILTER_WAVE_FILES ("Wave Files (*.wav)\0*.WAV\0" \
 			       "All Files (*.*)\0*\0\0\0")
+#define FILTER_EXE_FILES ("Executable Files (*.exe)\0*.EXE\0" \
+			       "All Files (*.*)\0*\0\0\0")
 #define FILTER_DYNLIB_FILES ("Dynamic Library Files (*.dll)\0*.dll\0" \
 				 "All Files (*.*)\0*\0\0\0")
 
