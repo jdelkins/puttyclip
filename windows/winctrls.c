@@ -268,10 +268,10 @@ void radioline(struct ctlpos *cp, char *text, int id, int nacross, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	int bid;
+	//int bid;
 	if (!btext)
 	    break;
-	bid = va_arg(ap, int);
+	/* bid = */va_arg(ap, int);
 	nbuttons++;
     }
     va_end(ap);
@@ -300,10 +300,10 @@ void bareradioline(struct ctlpos *cp, int nacross, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	int bid;
+	//int bid;
 	if (!btext)
 	    break;
-	bid = va_arg(ap, int);
+	/*bid = */va_arg(ap, int);
     }
     va_end(ap);
     buttons = snewn(nbuttons, struct radio);
@@ -331,10 +331,10 @@ void radiobig(struct ctlpos *cp, char *text, int id, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	int bid;
+	//int bid;
 	if (!btext)
 	    break;
-	bid = va_arg(ap, int);
+	/*bid = */va_arg(ap, int);
     }
     va_end(ap);
     buttons = snewn(nbuttons, struct radio);

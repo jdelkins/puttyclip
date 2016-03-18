@@ -122,7 +122,7 @@ static const char *serial_configure(Serial serial, HANDLE serport, Conf *conf)
 	 * Configurable parameters.
 	 */
 	dcb.BaudRate = conf_get_int(conf, CONF_serspeed);
-	msg = dupprintf("Configuring baud rate %d", dcb.BaudRate);
+	msg = dupprintf("Configuring baud rate %d", (int) dcb.BaudRate);
 	logevent(serial->frontend, msg);
 	sfree(msg);
 
@@ -290,9 +290,9 @@ static void serial_free(void *handle)
 static void serial_reconfig(void *handle, Conf *conf)
 {
     Serial serial = (Serial) handle;
-    const char *err;
+    //const char *err;
 
-    err = serial_configure(serial, serial->port, conf);
+    /*err = */serial_configure(serial, serial->port, conf);
 
     /*
      * FIXME: what should we do if err returns something?

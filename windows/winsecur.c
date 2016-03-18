@@ -94,8 +94,8 @@ PSID get_user_sid(void)
 
 int getsids(char *error)
 {
-    SID_IDENTIFIER_AUTHORITY world_auth = SECURITY_WORLD_SID_AUTHORITY;
-    SID_IDENTIFIER_AUTHORITY nt_auth = SECURITY_NT_AUTHORITY;
+    SID_IDENTIFIER_AUTHORITY world_auth = {SECURITY_WORLD_SID_AUTHORITY};
+    SID_IDENTIFIER_AUTHORITY nt_auth = {SECURITY_NT_AUTHORITY};
     int ret;
 
     error=NULL;
@@ -136,7 +136,7 @@ int getsids(char *error)
     }
     return ret;
 }
-  
+
 
 int make_private_security_descriptor(DWORD permissions,
                                      PSECURITY_DESCRIPTOR *psd,
@@ -231,7 +231,7 @@ int setprocessacl(char *error)
     int ret=FALSE;
     PACL acl = NULL;
 
-    static const nastyace=WRITE_DAC | WRITE_OWNER |
+    static const DWORD nastyace=WRITE_DAC | WRITE_OWNER |
 	PROCESS_CREATE_PROCESS | PROCESS_CREATE_THREAD |
 	PROCESS_DUP_HANDLE | PROCESS_QUERY_INFORMATION |
 	PROCESS_SET_QUOTA | PROCESS_SET_INFORMATION |
