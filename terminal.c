@@ -5076,6 +5076,11 @@ static void term_out(Terminal *term)
 		  case ';':
 		    if (term->esc_nargs == 1 && term->esc_args[0] == 52)
 			    term->termstate = SEEN_OSC_52; /* clibpard manipulation */
+		    else if (term->esc_nargs == 1 && term->esc_args[0] == 2) {
+			    osc_string_init(term);
+			    term->termstate = OSC_STRING;
+			    break;
+		    }
 		    if (term->esc_nargs < ARGS_MAX)
 			term->esc_args[term->esc_nargs++] = ARG_DEFAULT;
 		    break;
