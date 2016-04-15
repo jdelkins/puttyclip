@@ -71,6 +71,8 @@ const char *EMPTY_WINDOW_TITLE = "";
 
 const char sco2ansicolour[] = { 0, 4, 2, 6, 1, 5, 3, 7 };
 
+int xyz_ReceiveData(Terminal *term, const char *buffer, int len);
+
 #define sel_nl_sz  (sizeof(sel_nl)/sizeof(wchar_t))
 const wchar_t sel_nl[] = SEL_NL;
 
@@ -1653,6 +1655,8 @@ Terminal *term_init(Conf *myconf, struct unicode_data *ucsdata,
     term->basic_erase_char.cc_next = 0;
     term->erase_char = term->basic_erase_char;
 
+    term->xyz_transfering = 0;
+    term->xyz_Internals = NULL;
     return term;
 }
 
@@ -4444,6 +4448,11 @@ static void term_out(Terminal *term)
 		  case ';':
 		    if (term->esc_nargs == 1 && term->esc_args[0] == 52)
 			    term->termstate = SEEN_OSC_52; /* clibpard manipulation */
+		    else if (term->esc_nargs == 1 && term->esc_args[0] == 2) {
+			    osc_string_init(term);
+			    term->termstate = OSC_STRING;
+			    break;
+		    }
 		    if (term->esc_nargs < ARGS_MAX)
 			term->esc_args[term->esc_nargs++] = ARG_DEFAULT;
 		    break;
@@ -6422,19 +6431,26 @@ int term_ldisc(Terminal *term, int option)
 
 int term_data(Terminal *term, int is_stderr, const char *data, int len)
 {
-    bufchain_add(&term->inbuf, data, len);
+    if (term->xyz_transfering && !is_stderr)
+    {
+	return xyz_ReceiveData(term, data, len);
+    }
+    else
+    {
+	bufchain_add(&term->inbuf, data, len);
 
-    if (!term->in_term_out) {
-	term->in_term_out = TRUE;
-	term_reset_cblink(term);
-	/*
-	 * During drag-selects, we do not process terminal input,
-	 * because the user will want the screen to hold still to
-	 * be selected.
-	 */
-	if (term->selstate != DRAGGING)
-	    term_out(term);
-	term->in_term_out = FALSE;
+	if (!term->in_term_out) {
+	    term->in_term_out = TRUE;
+	    term_reset_cblink(term);
+	    /*
+	     * During drag-selects, we do not process terminal input,
+	     * because the user will want the screen to hold still to
+	     * be selected.
+	     */
+	    if (term->selstate != DRAGGING)
+		term_out(term);
+	    term->in_term_out = FALSE;
+	}
     }
 
     /*

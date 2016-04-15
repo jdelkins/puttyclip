@@ -13,6 +13,7 @@
 #include "network.h"
 #include "proxy.h"
 #include "ssh.h"
+#include "winsecur.h"
 
 #include "wincapi.h"
 
