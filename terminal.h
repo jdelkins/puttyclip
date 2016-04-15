@@ -178,9 +178,10 @@ struct terminal_tag {
 #define ANSI(x,y)	((x)+((y)<<8))
 #define ANSI_QUE(x)	ANSI(x,TRUE)
 
-#define OSC_STR_MAX 2048
+#define OSC_STR_CHUNK 4096
     int osc_strlen;
-    char osc_string[OSC_STR_MAX + 1];
+    size_t osc_bufsize;
+    char *osc_string;
     int osc_w;
 
     char id_string[1024];
@@ -193,6 +194,7 @@ struct terminal_tag {
 	SEEN_CSI,
 	SEEN_OSC,
 	SEEN_OSC_W,
+	SEEN_OSC_52,
 
 	DO_CTRLS,
 
