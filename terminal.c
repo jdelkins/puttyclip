@@ -4003,6 +4003,16 @@ static void term_out(Terminal *term)
 					     << ATTR_FGSHIFT);
 					i += 2;
 				    }
+				    /* check for true color mode */
+				    else if (i+4 < term->esc_nargs &&
+					     term->esc_args[i+1] == 2) {
+					/* JDE: DO THA THANG */
+					term->curr_colourinfo.tf = 1;
+					term->curr_colourinfo.fr = term->esc_args[i + 2];
+					term->curr_colourinfo.fg = term->esc_args[i + 3];
+					term->curr_colourinfo.fb = term->esc_args[i + 4];
+					i += 4;
+				    }
 				    break;
 				  case 48:   /* xterm 256-colour mode */
 				    if (i+2 < term->esc_nargs &&
@@ -4012,6 +4022,16 @@ static void term_out(Terminal *term)
 					    ((term->esc_args[i+2] & 0xFF)
 					     << ATTR_BGSHIFT);
 					i += 2;
+				    }
+				    /* check for true color mode */
+				    else if (i+4 < term->esc_nargs &&
+					     term->esc_args[i+1] == 2) {
+					/* JDE: DO THA THANG */
+					term->curr_colourinfo.tb = 1;
+					term->curr_colourinfo.br = term->esc_args[i + 2];
+					term->curr_colourinfo.bg = term->esc_args[i + 3];
+					term->curr_colourinfo.bb = term->esc_args[i + 4];
+					i += 4;
 				    }
 				    break;
 				}
