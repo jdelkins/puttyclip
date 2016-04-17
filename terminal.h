@@ -208,7 +208,7 @@ struct terminal_tag {
     char *osc_string;
     int osc_w;
 
-#define DCS_STR_MAX OSC_STR_MAX
+#define DCS_STR_MAX 2048
 #define dcs_final osc_w
 #define dcs_strlen osc_strlen
 #define dcs_string osc_string

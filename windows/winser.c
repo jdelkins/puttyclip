@@ -290,7 +290,7 @@ static void serial_free(void *handle)
 static void serial_reconfig(void *handle, Conf *conf)
 {
     Serial serial = (Serial) handle;
-    //const char *err;
+    /*const char *err;*/
 
     /*err = */serial_configure(serial, serial->port, conf);
 

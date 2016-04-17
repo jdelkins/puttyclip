@@ -2908,11 +2908,11 @@ static void do_osc(Terminal *term)
 	    break;
 	  case 52:
 	    {
-		// decode the base64 string
+		/* decode the base64 string */
 		uint8_t *buf;
 		int  decode_len;
 
-		// we should need only 3/4 of osc_strlen
+		/* we should need only 3/4 of osc_strlen */
 		buf = snewn(term->osc_strlen, uint8_t);
 		decode_len = b64_pton(term->osc_string, buf, term->osc_strlen);
 		clipboard_copy(term, (char *) buf, decode_len);
@@ -2941,14 +2941,14 @@ static void osc_string_add_char(Terminal *term, char c)
 
 static void osc_string_add(Terminal *term, char *buf, int len)
 {
-    // expand buffer if necessary
+    /* expand buffer if necessary */
     if (term->osc_strlen + len + 1 >= term->osc_bufsize) {
 	int newsize = term->osc_bufsize + max(len + 1, OSC_STR_CHUNK);
 	term->osc_string = sresize(term->osc_string, newsize, char);
 	term->osc_bufsize = newsize;
-	//debug(("resized osc buffer: %d\n", term->osc_bufsize));
+	/*debug(("resized osc buffer: %d\n", term->osc_bufsize));*/
     }
-    // actually copy the data into the buffer
+    /* actually copy the data into the buffer */
     memcpy(&term->osc_string[term->osc_strlen], buf, len);
     term->osc_strlen += len;
 }
@@ -2964,7 +2964,7 @@ static void clipboard_copy(Terminal *term, char *buf, int size)
 
     wbuf_size = mb_to_wc(term->ucsdata->line_codepage, 0, buf, size, NULL, 0) + 1;
     wbuf = snewn(wbuf_size, wchar_t);
-    //debug(("clipboard_copy: osc_strlen = %d, wbuf_size = %d\n", size, wbuf_size));
+    /*debug(("clipboard_copy: osc_strlen = %d, wbuf_size = %d\n", size, wbuf_size));*/
     mb_to_wc(term->ucsdata->line_codepage, 0, buf, size, wbuf, wbuf_size);
     wbuf[wbuf_size - 1] = L'\0';
     write_clip(term->frontend, wbuf, NULL, wbuf_size, TRUE);
@@ -5173,7 +5173,7 @@ static void term_out(Terminal *term)
 			break;
 		    }
 		    if (c<128)
-			osc_string_add_char((char)c);
+			osc_string_add_char(term, (char)c);
 		    else {
 			int c1, c2, c3, c4;
 			c2 = (c>>6);
@@ -5184,17 +5184,17 @@ static void term_out(Terminal *term)
 			c3 = c3 - (c4<<6);
 
 			if (c < 2048) {
-			    osc_string_add_char((char)c2+192);
-			    osc_string_add_char((char)c1+128);
+			    osc_string_add_char(term, (char)c2+192);
+			    osc_string_add_char(term, (char)c1+128);
 			} else if (c < 65536) {
-			    osc_string_add_char((char)c3+224);
-			    osc_string_add_char((char)c2+128);
-			    osc_string_add_char((char)c1+128);
+			    osc_string_add_char(term, (char)c3+224);
+			    osc_string_add_char(term, (char)c2+128);
+			    osc_string_add_char(term, (char)c1+128);
 			} else {
-			    osc_string_add_char((char)c4+240);
-			    osc_string_add_char((char)c3+128);
-			    osc_string_add_char((char)c2+128);
-			    osc_string_add_char((char)c1+128);
+			    osc_string_add_char(term, (char)c4+240);
+			    osc_string_add_char(term, (char)c3+128);
+			    osc_string_add_char(term, (char)c2+128);
+			    osc_string_add_char(term, (char)c1+128);
 			}
 		    }
 		}

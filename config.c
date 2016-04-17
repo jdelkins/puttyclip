@@ -2737,7 +2737,7 @@ void setup_config_box(struct controlbox *b, int midsession,
 	}
     }
 
-    // z-modem panel
+    /* z-modem panel */
     ctrl_settitle(b, "Connection/ZModem",
 	    "Options controlling Z Modem transfers");
 
@@ -2750,7 +2750,7 @@ void setup_config_box(struct controlbox *b, int midsession,
     ctrl_editbox(s, "Options", NO_SHORTCUT, 50,
 	    HELPCTX(zmodem_rzoptions),
 	    conf_editbox_handler, I(CONF_rzoptions),
-	    I(50)); // TODO: I don't know what the last param does
+	    I(50)); /* TODO: I don't know what the last param does */
 
     s = ctrl_getset(b, "Connection/ZModem", "send",
 			"Send command");
@@ -2761,7 +2761,7 @@ void setup_config_box(struct controlbox *b, int midsession,
     ctrl_editbox(s, "Options", NO_SHORTCUT, 50,
 	    HELPCTX(zmodem_szoptions),
 	    conf_editbox_handler, I(CONF_szoptions),
-	    I(50)); // TODO: I don't know what the last param does
+	    I(50)); /* TODO: I don't know what the last param does */
 
     s = ctrl_getset(b, "Connection/ZModem", "download",
 	    "Download folder");

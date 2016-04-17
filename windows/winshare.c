@@ -21,7 +21,7 @@
 /* JDE: not provided in wincrypt.h under mingw32, so define them */
 #ifdef JDEBUILD
 
-//ifdef COVERITY
+/*ifdef COVERITY*/
 /*
  * The hack I use to build for Coverity scanning, using winegcc and
  * Makefile.cyg, didn't provide some defines in wincrypt.h last time I
