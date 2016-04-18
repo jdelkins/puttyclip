@@ -40,7 +40,7 @@ void xyz_Done(Terminal *term)
 			Sleep(500);
 			CloseHandle(term->xyz_Internals->read_stdout);
 			CloseHandle(term->xyz_Internals->read_stderr);
-			GetExitCodeProcess(term->xyz_Internals->pi.hProcess,&exitcode);      //while the process is running
+			GetExitCodeProcess(term->xyz_Internals->pi.hProcess,&exitcode);      /*while the process is running*/
 			if (exitcode == STILL_ACTIVE) {
 				TerminateProcess(term->xyz_Internals->pi.hProcess, 0);
 			}
@@ -76,7 +76,7 @@ static int xyz_Check(Backend *back, void *backhandle, Terminal *term, int outerr
 
 	bread = 0;
 	PeekNamedPipe(h,buf,1,&bread,&avail,NULL);
-	//check to see if there is any data to read from stdout
+	/*check to see if there is any data to read from stdout*/
 	if (bread != 0)
 	{
 		while (1)
@@ -87,7 +87,7 @@ static int xyz_Check(Backend *back, void *backhandle, Terminal *term, int outerr
 			if (bread == 0)
 				return 0;
 
-			if (ReadFile(h,buf,sizeof(buf),&bread,NULL))  { //read the stdout pipe
+			if (ReadFile(h,buf,sizeof(buf),&bread,NULL))  { /*read the stdout pipe*/
 				if (bread) {
 #if 0
 					char *buffer;
@@ -133,7 +133,7 @@ static int xyz_Check(Backend *back, void *backhandle, Terminal *term, int outerr
 					continue;
 				}
 			}
-			// EOF/ERROR
+			/* EOF/ERROR */
 			xyz_Done(term);
 			return 1;
 		}
@@ -166,7 +166,7 @@ void xyz_StartSending(Terminal *term)
 	memset(filenames, 0, sizeof(filenames));
 	fn.lStructSize = sizeof(fn);
 	fn.lpstrFile = filenames;
-	fn.nMaxFile = sizeof(filenames)-1; // the missing -1 was causing a crash on very long selections
+	fn.nMaxFile = sizeof(filenames)-1; /* the missing -1 was causing a crash on very long selections */
 	fn.lpstrTitle = "Select files to upload...";
 	fn.Flags = OFN_ALLOWMULTISELECT | OFN_CREATEPROMPT | OFN_ENABLESIZING | OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_HIDEREADONLY | OFN_PATHMUSTEXIST;
 
@@ -208,9 +208,9 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 {
 	STARTUPINFO si;
 	SECURITY_ATTRIBUTES sa;
-	SECURITY_DESCRIPTOR sd;               //security information for pipes
+	SECURITY_DESCRIPTOR sd;               /*security information for pipes*/
 	
-	HANDLE read_stdout, read_stderr, write_stdin, newstdin, newstdout, newstderr; //pipe handles
+	HANDLE read_stdout, read_stderr, write_stdin, newstdin, newstdout, newstderr; /*pipe handles*/
 
 	
 	
@@ -218,7 +218,7 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 	term->xyz_Internals = (struct zModemInternals *)smalloc(sizeof(struct zModemInternals));
 	memset(term->xyz_Internals, 0, sizeof(struct zModemInternals));
 
-	if (IsWinNT())        //initialize security descriptor (Windows NT)
+	if (IsWinNT())        /*initialize security descriptor (Windows NT)*/
 	{
 		InitializeSecurityDescriptor(&sd,SECURITY_DESCRIPTOR_REVISION);
 		SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
@@ -226,19 +226,19 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 	}
 	else sa.lpSecurityDescriptor = NULL;
 	sa.nLength = sizeof(SECURITY_ATTRIBUTES);
-	sa.bInheritHandle = TRUE;         //allow inheritable handles
+	sa.bInheritHandle = TRUE;         /*allow inheritable handles*/
 	
-	if (!CreatePipe(&newstdin,&write_stdin,&sa,PIPE_SIZE))   //create stdin pipe
+	if (!CreatePipe(&newstdin,&write_stdin,&sa,PIPE_SIZE))   /*create stdin pipe*/
 	{
 		return 1;
 	}
-	if (!CreatePipe(&read_stdout,&newstdout,&sa,PIPE_SIZE))  //create stdout pipe
+	if (!CreatePipe(&read_stdout,&newstdout,&sa,PIPE_SIZE))  /*create stdout pipe*/
 	{
 		CloseHandle(newstdin);
 		CloseHandle(write_stdin);
 		return 1;
 	}
-	if (!CreatePipe(&read_stderr,&newstderr,&sa,PIPE_SIZE))  //create stdout pipe
+	if (!CreatePipe(&read_stderr,&newstderr,&sa,PIPE_SIZE))  /*create stdout pipe*/
 	{
 		CloseHandle(newstdin);
 		CloseHandle(write_stdin);
@@ -248,7 +248,7 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 	}
 
 	
-	GetStartupInfo(&si);      //set startupinfo for the spawned process
+	GetStartupInfo(&si);      /*set startupinfo for the spawned process*/
 				  /*
 				  The dwFlags member tells CreateProcess how to make the process.
 				  STARTF_USESTDHANDLES validates the hStd* members. STARTF_USESHOWWINDOW
@@ -257,11 +257,11 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 	si.dwFlags = STARTF_USESTDHANDLES|STARTF_USESHOWWINDOW;
 	si.wShowWindow = SW_HIDE;
 	si.hStdOutput = newstdout;
-	si.hStdError = newstderr;     //set the new handles for the child process
+	si.hStdError = newstderr;     /*set the new handles for the child process*/
 	si.hStdInput = newstdin;
 
 	
-	//system
+	/*system*/
 	if (!DuplicateHandle(GetCurrentProcess(), read_stdout, GetCurrentProcess(), &term->xyz_Internals->read_stdout, 0, FALSE, DUPLICATE_SAME_ACCESS))
 	{
 		CloseHandle(newstdin);
@@ -301,14 +301,14 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 
 	CloseHandle(write_stdin);
 	
-	//spawn the child process
+	/*spawn the child process*/
 	{
 		char params[1204];
 		const char *p;
 
 		p = incommand + strlen(incommand);
 		while (p != incommand) {
-			if (*p == '\\' || *p == ' ') { // no space in name either
+			if (*p == '\\' || *p == ' ') { /* no space in name either */
 				p++;
 				break;
 			}
@@ -318,8 +318,8 @@ static int xyz_SpawnProcess(Terminal *term, const char *incommand, const char *i
 
 		if (!CreateProcess(incommand,params,NULL, NULL,TRUE,CREATE_NEW_CONSOLE, NULL,filename_to_str(conf_get_filename(term->conf, CONF_zdownloaddir)),&si,&term->xyz_Internals->pi))
 		{
-			//DWORD err = GetLastError();
-	//		ErrorMessage("CreateProcess");
+			/*DWORD err = GetLastError();*/
+	/*		ErrorMessage("CreateProcess"); */
 			CloseHandle(newstdin);
 			CloseHandle(term->xyz_Internals->write_stdin);
 			CloseHandle(newstdout);

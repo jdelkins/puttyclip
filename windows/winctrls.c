@@ -268,7 +268,7 @@ void radioline(struct ctlpos *cp, char *text, int id, int nacross, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	//int bid;
+	/*int bid;*/
 	if (!btext)
 	    break;
 	/* bid = */va_arg(ap, int);
@@ -300,7 +300,7 @@ void bareradioline(struct ctlpos *cp, int nacross, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	//int bid;
+	/*int bid;*/
 	if (!btext)
 	    break;
 	/*bid = */va_arg(ap, int);
@@ -331,7 +331,7 @@ void radiobig(struct ctlpos *cp, char *text, int id, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	//int bid;
+	/*int bid;*/
 	if (!btext)
 	    break;
 	/*bid = */va_arg(ap, int);
@@ -1631,7 +1631,7 @@ void winctrl_layout(struct dlgparam *dp, struct winctrls *wc,
 	    shortcuts[nshortcuts++] = ctrl->fileselect.shortcut;
 	    editbutton(&pos, escaped, base_id, base_id+1,
 		       "Browse...", base_id+2);
-	    //shortcuts[nshortcuts++] = 'w';
+	    /*shortcuts[nshortcuts++] = 'w';*/
 	    sfree(escaped);
 	    break;
 	  case CTRL_FONTSELECT:
@@ -1651,7 +1651,7 @@ void winctrl_layout(struct dlgparam *dp, struct winctrls *wc,
 	    shortcuts[nshortcuts++] = ctrl->directoryselect.shortcut;
 	    editbutton(&pos, escaped, base_id, base_id+1,
 		       "Browse...", base_id+2);
-	    //shortcuts[nshortcuts++] = 'w';
+	    /*shortcuts[nshortcuts++] = 'w';*/
 	    sfree(escaped);
 	    break;
 	  default:
