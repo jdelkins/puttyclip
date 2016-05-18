@@ -120,12 +120,13 @@ static void scroll_display(Terminal *, int, int, int);
 #endif /* OPTIMISE_SCROLL */
 static void set_truecolour_attr(Terminal *, int, int, int, int);
 static void palette_conv(Terminal *, int fg, unsigned colnum);
-static void clipboard_init(void);
-static void clipboard_data(Terminal *term, void *buff,  int len);
 static void osc_string_init(Terminal *term);
 static void osc_string_add(Terminal *term, char *buf,  int len);
 static void osc_string_add_char(Terminal *term, char c);
 static void clipboard_copy(Terminal *term, char *buf, int len);
+static int parse_xterm_rgb(char *spec, int *r, int *g, int *b);
+static int hex2nr(char d1, char d2);
+static void do_osc(Terminal *term);
 
 static termline *newline(Terminal *term, int cols, int bce)
 {
@@ -2882,6 +2883,44 @@ static void toggle_mode(Terminal *term, int mode, int query, int state)
 	}
 }
 
+static int hex2nr(char d1, char d2)
+{
+    int i1, i2;
+    if (d1 >= 'a' && d1 <= 'f')
+	i1 = d1 - 'a' + 10;
+    else if (d1 >= 'A' && d1 <= 'F')
+	i1 = d1 - 'A' + 10;
+    else if (d1 >= '0' && d1 <= '9')
+	i1 = d1 - '0';
+    else
+	return -1;
+
+    if (d2 >= 'a' && d2 <= 'f')
+	i2 = d2 - 'a' + 10;
+    else if (d2 >= 'A' && d2 <= 'F')
+	i2 = d2 - 'A' + 10;
+    else if (d2 >= '0' && d2 <= '9')
+	i2 = d2 - '0';
+    else
+	return -1;
+
+    return 16 * i1 + i2;
+}
+
+static int parse_xterm_rgb(char *spec, int *r, int *g, int *b)
+{
+    if (12 != strlen(spec))
+	return 0;
+    if (spec[0] != 'r' || spec[1] != 'g' || spec[2] != 'b' || spec[3] != ':')
+	return 0;
+    *r = hex2nr(spec[4], spec[5]);
+    *g = hex2nr(spec[7], spec[8]);
+    *b = hex2nr(spec[10], spec[11]);
+    if (*r < 0 || *g < 0 || *b < 0)
+	return 0;
+    return 1;
+}
+
 /*
  * Process an OSC sequence: set window title or icon name.
  */
@@ -2905,6 +2944,44 @@ static void do_osc(Terminal *term)
 	  case 21:
 	    if (!term->no_remote_wintitle)
 		set_title(term->frontend, term->osc_string);
+	    break;
+	  case 4: /* palette manipulation */
+	    {
+		int r, g, b;
+		if (parse_xterm_rgb(term->osc_string, &r, &g, &b)) {
+		    palette_set(term->frontend, term->esc_args[1], r, g, b);
+		    term_invalidate(term);
+		}
+	    }
+	    break;
+	  case 10: /* foreground */
+	    {
+		int r, g, b;
+		if (parse_xterm_rgb(term->osc_string, &r, &g, &b)) {
+		    palette_set(term->frontend, 256 /* fg */, r, g, b);
+		    palette_set(term->frontend, 257 /* bold fg */, r, g, b);
+		    term_invalidate(term);
+		}
+	    }
+	    break;
+	  case 11: /* background */
+	    {
+		int r, g, b;
+		if (parse_xterm_rgb(term->osc_string, &r, &g, &b)) {
+		    palette_set(term->frontend, 258 /* bg */, r, g, b);
+		    palette_set(term->frontend, 259 /* bold bg */, r, g, b);
+		    term_invalidate(term);
+		}
+	    }
+	    break;
+	  case 12: /* cursor color */
+	    {
+		int r, g, b;
+		if (parse_xterm_rgb(term->osc_string, &r, &g, &b)) {
+		    palette_set(term->frontend, 261 /* cursor background */, r, g, b);
+		    term_invalidate(term);
+		}
+	    }
 	    break;
 	  case 52:
 	    {
@@ -5075,11 +5152,21 @@ static void term_out(Terminal *term)
 		    break;
 		  case ';':
 		    if (term->esc_nargs == 1 && term->esc_args[0] == 52)
-			    term->termstate = SEEN_OSC_52; /* clibpard manipulation */
+			term->termstate = SEEN_OSC_52; /* clibpard manipulation */
 		    else if (term->esc_nargs == 1 && term->esc_args[0] == 2) {
-			    osc_string_init(term);
-			    term->termstate = OSC_STRING;
-			    break;
+			osc_string_init(term);
+			term->termstate = OSC_STRING;
+			break;
+		    } else if (term->esc_nargs == 2 && term->esc_args[0] == 4) {
+			/* xterm pallette manipulation */
+			osc_string_init(term);
+			term->termstate = OSC_STRING;
+			break;
+		    } else if (term->esc_nargs == 1 && term->esc_args[0] >= 10 && term->esc_args[0] <= 12) {
+			/* change foreground, background, and cursor color */
+			osc_string_init(term);
+			term->termstate = OSC_STRING;
+			break;
 		    }
 		    if (term->esc_nargs < ARGS_MAX)
 			term->esc_args[term->esc_nargs++] = ARG_DEFAULT;
