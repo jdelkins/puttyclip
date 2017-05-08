@@ -63,8 +63,12 @@
  * until len is available, or it returns failure.
  * 
  * Both functions return 1 on success, 0 on failure.
+ *
+ * sftp_sendbuffer returns the size of the backlog of data in the
+ * transmit queue.
  */
 int sftp_senddata(char *data, int len);
+int sftp_sendbuffer(void);
 int sftp_recvdata(char *data, int len);
 
 /*
@@ -145,10 +149,10 @@ struct fxp_handle *fxp_opendir_recv(struct sftp_packet *pktin,
 				    struct sftp_request *req);
 
 /*
- * Close a file/dir.
+ * Close a file/dir. Returns 1 on success, 0 on error.
  */
 struct sftp_request *fxp_close_send(struct fxp_handle *handle);
-void fxp_close_recv(struct sftp_packet *pktin, struct sftp_request *req);
+int fxp_close_recv(struct sftp_packet *pktin, struct sftp_request *req);
 
 /*
  * Make a directory.

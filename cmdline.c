@@ -601,6 +601,26 @@ int cmdline_process_param(const char *p, char *value,
         filename_free(fn);
     }
 
+    if (!strcmp(p, "-proxycmd")) {
+	RETURN(2);
+	UNAVAILABLE_IN(TOOLTYPE_NONNETWORK);
+	SAVEABLE(0);
+        conf_set_int(conf, CONF_proxy_type, PROXY_CMD);
+	conf_set_str(conf, CONF_proxy_telnet_command, value);
+    }
+
+#ifdef _WINDOWS
+    /*
+     * Cross-tool options only available on Windows.
+     */
+    if (!strcmp(p, "-restrict-acl") || !strcmp(p, "-restrict_acl") ||
+        !strcmp(p, "-restrictacl")) {
+	RETURN(1);
+        restrict_process_acl();
+        restricted_acl = TRUE;
+    }
+#endif
+
     return ret;			       /* unrecognised */
 }
 

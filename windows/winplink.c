@@ -187,6 +187,8 @@ static void usage(void)
     printf("  -P port   connect to specified port\n");
     printf("  -l user   connect with specified username\n");
     printf("  -batch    disable all interactive prompts\n");
+    printf("  -proxycmd command\n");
+    printf("            use 'command' as local proxy\n");
     printf("  -sercfg configuration-string (e.g. 19200,8,n,1,X)\n");
     printf("            Specify the serial configuration (serial only)\n");
     printf("The following options only apply to SSH connections:\n");
@@ -223,8 +225,10 @@ static void usage(void)
 
 static void version(void)
 {
-    printf("plink: %s\n", ver);
-    exit(1);
+    char *buildinfo_text = buildinfo("\n");
+    printf("plink: %s\n%s\n", ver, buildinfo_text);
+    sfree(buildinfo_text);
+    exit(0);
 }
 
 char *do_select(SOCKET skt, int startup)
@@ -311,6 +315,8 @@ int main(int argc, char **argv)
     int use_subsystem = 0;
     int just_test_share_exists = FALSE;
     unsigned long now, next, then;
+
+    dll_hijacking_protection();
 
     sklist = NULL;
     skcount = sksize = 0;
@@ -498,22 +504,6 @@ int main(int argc, char **argv)
 	}
     }
 
-#if !defined UNPROTECT && !defined NO_SECURITY
-    /*
-     * Protect our process.
-     */
-    {
-        char *error = NULL;
-        if (!setprocessacl(error)) {
-            char *message = dupprintf("Could not restrict process ACL: %s",
-                                      error);
-            logevent(NULL, message);
-            sfree(message);
-            sfree(error);
-        }
-    }
-#endif
-
     if (errors)
 	return 1;
 
@@ -618,6 +608,17 @@ int main(int argc, char **argv)
 	return 1;
     }
 
+    /*
+     * Plink doesn't provide any way to add forwardings after the
+     * connection is set up, so if there are none now, we can safely set
+     * the "simple" flag.
+     */
+    if (conf_get_int(conf, CONF_protocol) == PROT_SSH &&
+	!conf_get_int(conf, CONF_x11_forward) &&
+	!conf_get_int(conf, CONF_agentfwd) &&
+	!conf_get_str_nthstrkey(conf, CONF_portfwd, 0))
+	conf_set_int(conf, CONF_ssh_simple, TRUE);
+
     logctx = log_init(NULL, conf);
     console_provide_logctx(logctx);
 
@@ -632,6 +633,10 @@ int main(int argc, char **argv)
             return 0;
         else
             return 1;
+    }
+
+    if (restricted_acl) {
+	logevent(NULL, "Running with restricted process ACL");
     }
 
     /*

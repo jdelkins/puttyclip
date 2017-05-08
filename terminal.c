@@ -1394,6 +1394,7 @@ static void power_on(Terminal *term, int clear)
     term->xterm_mouse = 0;
     term->xterm_extended_mouse = 0;
     term->urxvt_extended_mouse = 0;
+    term->xterm_alt_scroll = 0;
     set_raw_mouse_mode(term->frontend, FALSE);
     term->bracketed_paste = FALSE;
     {
@@ -1568,6 +1569,7 @@ void term_copy_stuff_from_conf(Terminal *term)
     term->no_remote_charset = conf_get_int(term->conf, CONF_no_remote_charset);
     term->no_remote_resize = conf_get_int(term->conf, CONF_no_remote_resize);
     term->no_remote_wintitle = conf_get_int(term->conf, CONF_no_remote_wintitle);
+    term->no_remote_clearscroll = conf_get_int(term->conf, CONF_no_remote_clearscroll);
     term->rawcnp = conf_get_int(term->conf, CONF_rawcnp);
     term->rect_select = conf_get_int(term->conf, CONF_rect_select);
     term->remote_qtitle_action = conf_get_int(term->conf, CONF_remote_qtitle_action);
@@ -2622,7 +2624,7 @@ static void erase_lots(Terminal *term,
 
     /* After an erase of lines from the top of the screen, we shouldn't
      * bring the lines back again if the terminal enlarges (since the user or
-     * application has explictly thrown them away). */
+     * application has explicitly thrown them away). */
     if (erasing_lines_from_top && !(term->alt_which))
 	term->tempsblines = 0;
 }
@@ -2832,6 +2834,10 @@ static void toggle_mode(Terminal *term, int mode, int query, int state)
 	    break;
 	  case 1006:		       /* xterm extended mouse */
 	    term->xterm_extended_mouse = state ? 1 : 0;
+	    break;
+	  case 1007:		       /* xterm extended mouse */
+	    term->xterm_alt_scroll = state ? 1 : 0;
+	    set_raw_mouse_mode(term->frontend, state);
 	    break;
 	  case 1015:		       /* urxvt extended mouse */
 	    term->urxvt_extended_mouse = state ? 1 : 0;
@@ -3136,12 +3142,16 @@ static void term_out_litchar(Terminal *term, unsigned long c)
 	 */
 	if (term->width_override)
 	    width = 1 + (term->width_override & 1);
-	/* If bit 2 is set these bits are deleted. But rather than a plain
-	 * set to zero we're allowing the user to specify what the next
-	 * state is by shifting right by three bits.
+	/*
+	 * If other bits are set the state will be reset automatically,
+	 * but rather than a plain set to zero we're allowing the user
+	 * to specify how long to stay in this state by treating the
+	 * high bits as a counter.
 	 */
-	if (term->width_override & 4)
-	    term->width_override >>= 3;
+	if (term->width_override & ~7)
+	    term->width_override -= 4;
+	else if (term->width_override & ~3)
+	    term->width_override = 0;
     }
     if (term->wrapnext && term->wrap && width > 0) {
 	cline->lattr |= LATTR_WRAPPED;
@@ -3605,6 +3615,46 @@ static void term_out(Terminal *term)
 		break;
 	    }
 	}
+
+#ifdef MBCSPREFIX
+	/* DBCS line codepage without direct to font. */
+	if ( (c&CSET_MASK) == CSET_ASCII &&
+	     term->ucsdata->unitab_line[c & 0xFF] == MBCSPREFIX) {
+	    if (term->lookaheadbuf_cnt > 1) {
+		char ibuf[8];
+		wchar_t wbuf[8];
+		int rv, i;
+		ibuf[0] = (BYTE)c;
+		for (i=1; i<term->lookaheadbuf_cnt; i++)
+		    ibuf[i] = (BYTE)term->lookaheadbuf[i];
+		rv = mb_to_wc(term->ucsdata->line_codepage,
+#ifdef MB_ERR_INVALID_CHARS
+			      MB_ERR_INVALID_CHARS,
+#else
+			      0,
+#endif
+			      ibuf, term->lookaheadbuf_cnt, wbuf, 6);
+		if (rv == 1) {
+		    c = wbuf[0];
+		    if (term->lookaheadbuf_cnt == 2 &&
+		        term->ucsdata->line_codepage != 20261) /* T.61 */
+			/* mk_wcwidth_cjk((unsigned int) c) == 2) */
+			    term->width_override = (term->width_override<<3) + 5;
+		    chars_eaten = term->lookaheadbuf_cnt;
+		}
+		else if (term->lookaheadbuf_cnt < 6 && rv == 0) {
+		    chars_eaten = 0;
+		    continue;
+		}
+	    } else {
+		chars_eaten = 0;
+		continue;
+	    }
+	}
+#endif
+
+	/* At this point all character translations are finished. */
+	c &= ~UNICODE_FLAG;
 
 #ifdef MBCSPREFIX
 	/* DBCS line codepage without direct to font. */
@@ -4256,7 +4306,8 @@ static void term_out(Terminal *term)
 			    if (i == 3) {
 				/* Erase Saved Lines (xterm)
 				 * This follows Thomas Dickey's xterm. */
-				term_clrsb(term);
+                                if (!term->no_remote_clearscroll)
+                                    term_clrsb(term);
 			    } else {
 				i++;
 				if (i > 3)
@@ -5237,7 +5288,7 @@ static void term_out(Terminal *term)
 		    term->termstate = TOPLEVEL;
 		} else if (c == '\033')
 		    term->termstate = OSC_MAYBE_ST;
-		else {
+		else if (term->osc_strlen < OSC_STR_MAX-4) {
 		    /* c is a unicode character make it UTF-8 in the string. */
 		    /* First resolve any Line/Direct character sets. */
 		    switch (c & CSET_MASK) {
@@ -5349,6 +5400,42 @@ static void term_out(Terminal *term)
 		    break;
 		}
 		break;
+	      case DCS_STRING:
+		/*
+		 * DCS strings are defined by DEC to start with a valid CSI
+		 * like sequence; this means it's not quite as bad as OSC
+		 * for unintentional entry, however, it's still only two
+		 * characters so once we get to the string DCS commands will
+		 * be aborted by a CR or LF.
+		 *
+		 * Note for an ECMA "command string" the valid characters are:
+		 *          ^H ^I ^J ^K ^L ^M and Space .. '~'
+		 *
+		 * However, "SOS" uses a 'character string' which is any
+		 * sequence of characters except the terminators.
+		 * DEC ignores all control characters, except aborts.
+		 *
+		 * DCS: -> "command string"
+		 * APC: -> "command string"
+		 * PM: -> "command string"
+		 * SOS: -> "character string"
+		 *
+		 * Note: ECMA-48: The interpretation of the command string
+		 * or the character string is not defined by this Standard,
+		 * but instead requires prior agreement between the sender
+		 * and the recipient of the data.
+		 */
+		if (c == '\012' || c == '\015') {
+		    term->termstate = TOPLEVEL;
+		} else if (c == 0234 || c == '\007') {
+		    /* do_dcs(term) */;
+		    term->termstate = TOPLEVEL;
+		} else if (c == '\033')
+		    term->termstate = DCS_MAYBE_ST;
+		else if (term->dcs_strlen < DCS_STR_MAX)
+		    term->dcs_string[term->dcs_strlen++] = (char)c;
+		break;
+
 	      case SEEN_OSC_P:
 		{
 		    int max = (term->osc_strlen == 0 ? 21 : 15);
@@ -5424,19 +5511,19 @@ static void term_out(Terminal *term)
 		     *
 		     * From VT102 manual:
 		     *       137 _  Blank             - Same
-		     *       140 `  Reserved          - Humm.
-		     *       141 a  Solid rectangle   - Similar
-		     *       142 b  1/                - Top half of fraction for the
-		     *       143 c  3/                - subscript numbers below.
-		     *       144 d  5/
+		     *       140 `  Reserved          - Actually: "Cd"
+		     *       141 a  Solid rectangle   - █ - All bits set.
+		     *       142 b  1/                - Top half of fraction
+		     *       143 c  3/                -   for the subscript
+		     *       144 d  5/                -   numbers below.
 		     *       145 e  7/
-		     *       146 f  Degrees           - Same
-		     *       147 g  Plus or minus     - Same
-		     *       150 h  Right arrow
-		     *       151 i  Ellipsis (dots)
-		     *       152 j  Divide by
-		     *       153 k  Down arrow
-		     *       154 l  Bar at scan 0
+		     *       146 f  Degrees           - °
+		     *       147 g  Plus or minus     - ±
+		     *       150 h  Right arrow       - →
+		     *       151 i  Ellipsis (dots)   - …
+		     *       152 j  Divide by         - ÷
+		     *       153 k  Down arrow        - ↓
+		     *       154 l  Bar at scan 0     - VT52 uses 8 lines
 		     *       155 m  Bar at scan 1
 		     *       156 n  Bar at scan 2
 		     *       157 o  Bar at scan 3     - Similar
@@ -5454,7 +5541,7 @@ static void term_out(Terminal *term)
 		     *       173 {  Subscript 7
 		     *       174 |  Subscript 8
 		     *       175 }  Subscript 9
-		     *       176 ~  Paragraph
+		     *       176 ~  Paragraph         - ¶
 		     *
 		     */
 		  case 'F':
@@ -6480,7 +6567,7 @@ typedef struct {
 static void clip_addchar(clip_workbuf *b, wchar_t chr, int attr)
 {
     if (b->bufpos >= b->buflen) {
-	b->buflen += 128;
+	b->buflen *= 2;
 	b->textbuf = sresize(b->textbuf, b->buflen, wchar_t);
 	b->textptr = b->textbuf + b->bufpos;
 	b->attrbuf = sresize(b->attrbuf, b->buflen, int);
@@ -6991,7 +7078,7 @@ void term_mouse(Terminal *term, Mouse_Button braw, Mouse_Button bcooked,
 {
     pos selpoint;
     termline *ldata;
-    int raw_mouse = (term->xterm_mouse &&
+    int raw_mouse = ((term->xterm_mouse || term->xterm_alt_scroll) &&
 		     !term->no_mouse_rep &&
 		     !(term->mouse_override && shift));
     int default_seltype;
@@ -7046,6 +7133,7 @@ void term_mouse(Terminal *term, Mouse_Button braw, Mouse_Button bcooked,
 	int encstate = 0, r, c, wheel;
 	char abuf[32];
 	int len = 0;
+	int bypass = 0;
 
 	if (term->ldisc) {
 
@@ -7112,13 +7200,18 @@ void term_mouse(Terminal *term, Mouse_Button braw, Mouse_Button bcooked,
 		len = sprintf(abuf, "\033[<%d;%d;%d%c", encstate, c, r, a == MA_RELEASE ? 'm' : 'M');
 	    } else if (term->urxvt_extended_mouse) {
 		len = sprintf(abuf, "\033[%d;%d;%dM", encstate + 32, c, r);
+	    } else if (term->xterm_alt_scroll && (wheel || !term->xterm_mouse)) {
+		if (!wheel || shift || ctrl)
+		    bypass = 1;
+		else
+		    len = sprintf(abuf, "\033[%c", encstate+1);
 	    } else if (c <= 223 && r <= 223) {
 		len = sprintf(abuf, "\033[M%c%c%c", encstate + 32, c + 32, r + 32);
 	    }
             if (len > 0)
                 ldisc_send(term->ldisc, abuf, len, 0);
 	}
-	return;
+	if (!bypass || len != 0) return;
     }
 
     /*
@@ -7277,6 +7370,9 @@ int format_arrow_key(char *buf, Terminal *term, int xkey, int ctrl)
 	 * cursor and app keypad are independently switchable
 	 * modes. If anyone complains about _this_ I'll have to
 	 * put in a configurable option.
+	 *
+	 * RDB: The VT100 ROM itself accepts them independently,
+	 * so this is a documentation error or usage recommendation.
 	 */
 	if (!term->app_keypad_keys)
 	    app_flg = 0;
@@ -7422,6 +7518,8 @@ char *term_get_ttymode(Terminal *term, const char *mode)
     const char *val = NULL;
     if (strcmp(mode, "ERASE") == 0) {
 	val = term->bksp_is_delete ? "^?" : "^H";
+    } else if (strcmp(mode, "IUTF8") == 0) {
+	val = frontend_is_utf8(term->frontend) ? "yes" : "no";
     }
     /* FIXME: perhaps we should set ONLCR based on lfhascr as well? */
     /* FIXME: or ECHO and friends based on local echo state? */

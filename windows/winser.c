@@ -122,12 +122,16 @@ static const char *serial_configure(Serial serial, HANDLE serport, Conf *conf)
 	 * Configurable parameters.
 	 */
 	dcb.BaudRate = conf_get_int(conf, CONF_serspeed);
+<<<<<<< HEAD
 	msg = dupprintf("Configuring baud rate %d", (int) dcb.BaudRate);
+=======
+	msg = dupprintf("Configuring baud rate %lu", dcb.BaudRate);
+>>>>>>> e85a8bd12ef08a64b0963def015a6de9432d9cfa
 	logevent(serial->frontend, msg);
 	sfree(msg);
 
 	dcb.ByteSize = conf_get_int(conf, CONF_serdatabits);
-	msg = dupprintf("Configuring %d data bits", dcb.ByteSize);
+	msg = dupprintf("Configuring %u data bits", dcb.ByteSize);
 	logevent(serial->frontend, msg);
 	sfree(msg);
 
@@ -220,6 +224,7 @@ static const char *serial_init(void *frontend_handle, void **backend_handle,
     {
 	char *msg = dupprintf("Opening serial device %s", serline);
 	logevent(serial->frontend, msg);
+        sfree(msg);
     }
 
     {

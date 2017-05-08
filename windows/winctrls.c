@@ -39,6 +39,21 @@
 #define PUSHBTNHEIGHT 14
 #define PROGBARHEIGHT 14
 
+DECL_WINDOWS_FUNCTION(static, void, InitCommonControls, (void));
+DECL_WINDOWS_FUNCTION(static, BOOL, MakeDragList, (HWND));
+DECL_WINDOWS_FUNCTION(static, int, LBItemFromPt, (HWND, POINT, BOOL));
+DECL_WINDOWS_FUNCTION(static, int, DrawInsert, (HWND, HWND, int));
+
+void init_common_controls(void)
+{
+    HMODULE comctl32_module = load_system32_dll("comctl32.dll");
+    GET_WINDOWS_FUNCTION(comctl32_module, InitCommonControls);
+    GET_WINDOWS_FUNCTION(comctl32_module, MakeDragList);
+    GET_WINDOWS_FUNCTION(comctl32_module, LBItemFromPt);
+    GET_WINDOWS_FUNCTION(comctl32_module, DrawInsert);
+    p_InitCommonControls();
+}
+
 void ctlposinit(struct ctlpos *cp, HWND hwnd,
 		int leftborder, int rightborder, int topborder)
 {
@@ -77,7 +92,7 @@ HWND doctl(struct ctlpos *cp, RECT r,
     if (cp->hwnd) {
 	ctl = CreateWindowEx(exstyle, wclass, wtext, wstyle,
 			     r.left, r.top, r.right, r.bottom,
-			     cp->hwnd, (HMENU) wid, hinst, NULL);
+			     cp->hwnd, (HMENU)(ULONG_PTR)wid, hinst, NULL);
 	SendMessage(ctl, WM_SETFONT, cp->font, MAKELPARAM(TRUE, 0));
 
 	if (!strcmp(wclass, "LISTBOX")) {
@@ -268,10 +283,9 @@ void radioline(struct ctlpos *cp, char *text, int id, int nacross, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	/*int bid;*/
 	if (!btext)
 	    break;
-	/* bid = */va_arg(ap, int);
+	(void) va_arg(ap, int); /* id */
 	nbuttons++;
     }
     va_end(ap);
@@ -300,10 +314,10 @@ void bareradioline(struct ctlpos *cp, int nacross, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	/*int bid;*/
 	if (!btext)
 	    break;
-	/*bid = */va_arg(ap, int);
+	(void) va_arg(ap, int); /* id */
+        nbuttons++;
     }
     va_end(ap);
     buttons = snewn(nbuttons, struct radio);
@@ -331,10 +345,10 @@ void radiobig(struct ctlpos *cp, char *text, int id, ...)
     nbuttons = 0;
     while (1) {
 	char *btext = va_arg(ap, char *);
-	/*int bid;*/
 	if (!btext)
 	    break;
-	/*bid = */va_arg(ap, int);
+	(void) va_arg(ap, int); /* id */
+        nbuttons++;
     }
     va_end(ap);
     buttons = snewn(nbuttons, struct radio);
@@ -923,7 +937,7 @@ void prefslist(struct prefslist *hdl, struct ctlpos *cp, int lines,
 			    WS_VSCROLL | LBS_HASSTRINGS | LBS_USETABSTOPS,
                             WS_EX_CLIENTEDGE,
                             "", listid);
-		MakeDragList(ctl);
+		p_MakeDragList(ctl);
             }
             break;
 
@@ -998,17 +1012,17 @@ int pl_itemfrompt(HWND hwnd, POINT cursor, BOOL scroll)
      * current item if the upper edge is closer than
      * the lower edge, or _below_ it if vice versa.
      */
-    ret = LBItemFromPt(hwnd, cursor, scroll);
+    ret = p_LBItemFromPt(hwnd, cursor, scroll);
     if (ret == -1)
 	return ret;
-    ret = LBItemFromPt(hwnd, cursor, FALSE);
+    ret = p_LBItemFromPt(hwnd, cursor, FALSE);
     updist = downdist = 0;
     for (i = 1; i < 4096 && (!updist || !downdist); i++) {
 	uppoint = downpoint = cursor;
 	uppoint.y -= i;
 	downpoint.y += i;
-	upitem = LBItemFromPt(hwnd, uppoint, FALSE);
-	downitem = LBItemFromPt(hwnd, downpoint, FALSE);
+	upitem = p_LBItemFromPt(hwnd, uppoint, FALSE);
+	downitem = p_LBItemFromPt(hwnd, downpoint, FALSE);
 	if (!updist && upitem != ret)
 	    updist = i;
 	if (!downdist && downitem != ret)
@@ -1049,13 +1063,13 @@ int handle_prefslist(struct prefslist *hdl,
 		    SendDlgItemMessage(hwnd, hdl->listid,
 				       LB_ADDSTRING, 0, (LPARAM) "");
 
-                hdl->srcitem = LBItemFromPt(dlm->hWnd, dlm->ptCursor, TRUE);
+                hdl->srcitem = p_LBItemFromPt(dlm->hWnd, dlm->ptCursor, TRUE);
 		hdl->dragging = 0;
 		/* XXX hack Q183115 */
 		SetWindowLongPtr(hwnd, DWLP_MSGRESULT, TRUE);
                 ret |= 1; break;
               case DL_CANCELDRAG:
-		DrawInsert(hwnd, dlm->hWnd, -1);     /* Clear arrow */
+		p_DrawInsert(hwnd, dlm->hWnd, -1);     /* Clear arrow */
 		SendDlgItemMessage(hwnd, hdl->listid,
 				   LB_DELETESTRING, hdl->dummyitem, 0);
 		hdl->dragging = 0;
@@ -1064,7 +1078,7 @@ int handle_prefslist(struct prefslist *hdl,
 		hdl->dragging = 1;
 		dest = pl_itemfrompt(dlm->hWnd, dlm->ptCursor, TRUE);
 		if (dest > hdl->dummyitem) dest = hdl->dummyitem;
-		DrawInsert (hwnd, dlm->hWnd, dest);
+		p_DrawInsert (hwnd, dlm->hWnd, dest);
 		if (dest >= 0)
 		    SetWindowLongPtr(hwnd, DWLP_MSGRESULT, DL_MOVECURSOR);
 		else
@@ -1074,7 +1088,7 @@ int handle_prefslist(struct prefslist *hdl,
 		if (hdl->dragging) {
 		    dest = pl_itemfrompt(dlm->hWnd, dlm->ptCursor, TRUE);
 		    if (dest > hdl->dummyitem) dest = hdl->dummyitem;
-		    DrawInsert (hwnd, dlm->hWnd, -1);
+		    p_DrawInsert (hwnd, dlm->hWnd, -1);
 		}
 		SendDlgItemMessage(hwnd, hdl->listid,
 				   LB_DELETESTRING, hdl->dummyitem, 0);

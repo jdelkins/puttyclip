@@ -179,6 +179,7 @@ struct terminal_tag {
     int mouse_is_down;		       /* used while tracking mouse buttons */
     int vttest_norevwrap;	       /* XTerm's vttest mode; reverse wrap */
     int vttest_decmodes;	       /* Enable intrusive DEC flags. */
+    int xterm_alt_scroll;	       /* mouse wheel arrows to host */
 
     int bracketed_paste;
 
@@ -357,6 +358,7 @@ struct terminal_tag {
     int no_remote_charset;
     int no_remote_resize;
     int no_remote_wintitle;
+    int no_remote_clearscroll;
     int rawcnp;
     int rect_select;
     int remote_qtitle_action;

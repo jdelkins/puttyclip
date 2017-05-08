@@ -19,11 +19,15 @@ static const struct keyvalwhere ciphernames[] = {
     { "des",        CIPHER_DES,             -1, -1 }
 };
 
+/* The default order here is sometimes overridden by the backward-
+ * compatibility warts in load_open_settings(), and should be kept
+ * in sync with those. */
 static const struct keyvalwhere kexnames[] = {
     { "ecdh",               KEX_ECDH,       -1, +1 },
+    /* This name is misleading: it covers both SHA-256 and SHA-1 variants */
     { "dh-gex-sha1",        KEX_DHGEX,      -1, -1 },
     { "dh-group14-sha1",    KEX_DHGROUP14,  -1, -1 },
-    { "dh-group1-sha1",     KEX_DHGROUP1,   -1, -1 },
+    { "dh-group1-sha1",     KEX_DHGROUP1,   KEX_WARN, +1 },
     { "rsa",                KEX_RSA,        KEX_WARN, -1 },
     { "WARN",               KEX_WARN,       -1, -1 }
 };
@@ -42,6 +46,9 @@ static const struct keyvalwhere hknames[] = {
  * This is currently precisely the same as the set in ssh.c, but could
  * in principle differ if other backends started to support tty modes
  * (e.g., the pty backend).
+ * The set of modes in in this array is currently significant for
+ * settings migration from old versions; if they change, review the
+ * gppmap() invocation for "TerminalModes".
  */
 const char *const ttymodes[] = {
     "INTR",	"QUIT",     "ERASE",	"KILL",     "EOF",
@@ -50,11 +57,11 @@ const char *const ttymodes[] = {
     "SWTCH",	"STATUS",   "DISCARD",	"IGNPAR",   "PARMRK",
     "INPCK",	"ISTRIP",   "INLCR",	"IGNCR",    "ICRNL",
     "IUCLC",	"IXON",     "IXANY",	"IXOFF",    "IMAXBEL",
-    "ISIG",	"ICANON",   "XCASE",	"ECHO",     "ECHOE",
-    "ECHOK",	"ECHONL",   "NOFLSH",	"TOSTOP",   "IEXTEN",
-    "ECHOCTL",	"ECHOKE",   "PENDIN",	"OPOST",    "OLCUC",
-    "ONLCR",	"OCRNL",    "ONOCR",	"ONLRET",   "CS7",
-    "CS8",	"PARENB",   "PARODD",	NULL
+    "IUTF8",    "ISIG",     "ICANON",   "XCASE",    "ECHO",
+    "ECHOE",    "ECHOK",    "ECHONL",   "NOFLSH",   "TOSTOP",
+    "IEXTEN",   "ECHOCTL",  "ECHOKE",   "PENDIN",   "OPOST",
+    "OLCUC",    "ONLCR",    "OCRNL",    "ONOCR",    "ONLRET",
+    "CS7",      "CS8",      "PARENB",   "PARODD",   NULL
 };
 
 /*
@@ -309,19 +316,14 @@ static const char *val2key(const struct keyvalwhere *mapping,
  * to the end and duplicates are weeded.
  * XXX: assumes vals in 'mapping' are small +ve integers
  */
-static void gprefs(void *sesskey, const char *name, const char *def,
-		   const struct keyvalwhere *mapping, int nvals,
-		   Conf *conf, int primary)
+static void gprefs_from_str(const char *str,
+			    const struct keyvalwhere *mapping, int nvals,
+			    Conf *conf, int primary)
 {
-    char *commalist;
+    char *commalist = dupstr(str);
     char *p, *q;
     int i, j, n, v, pos;
     unsigned long seen = 0;	       /* bitmap for weeding dups etc */
-
-    /*
-     * Fetch the string which we'll parse as a comma-separated list.
-     */
-    commalist = gpps_raw(sesskey, name, def);
 
     /*
      * Go through that list and convert it into values.
@@ -391,6 +393,21 @@ static void gprefs(void *sesskey, const char *name, const char *def,
             }
         }
     }
+}
+
+/*
+ * Read a preference list.
+ */
+static void gprefs(void *sesskey, const char *name, const char *def,
+		   const struct keyvalwhere *mapping, int nvals,
+		   Conf *conf, int primary)
+{
+    /*
+     * Fetch the string which we'll parse as a comma-separated list.
+     */
+    char *value = gpps_raw(sesskey, name, def);
+    gprefs_from_str(value, mapping, nvals, conf, primary);
+    sfree(value);
 }
 
 /* 
@@ -531,6 +548,7 @@ void save_open_settings(void *sesskey, Conf *conf)
     write_setting_i(sesskey, "NoRemoteResize", conf_get_int(conf, CONF_no_remote_resize));
     write_setting_i(sesskey, "NoAltScreen", conf_get_int(conf, CONF_no_alt_screen));
     write_setting_i(sesskey, "NoRemoteWinTitle", conf_get_int(conf, CONF_no_remote_wintitle));
+    write_setting_i(sesskey, "NoRemoteClearScroll", conf_get_int(conf, CONF_no_remote_clearscroll));
     write_setting_i(sesskey, "RemoteQTitleAction", conf_get_int(conf, CONF_remote_qtitle_action));
     write_setting_i(sesskey, "NoDBackspace", conf_get_int(conf, CONF_no_dbackspace));
     write_setting_i(sesskey, "NoRemoteCharset", conf_get_int(conf, CONF_no_remote_charset));
@@ -742,7 +760,51 @@ void load_open_settings(void *sesskey, Conf *conf)
     gppi(sesskey, "TCPKeepalives", 0, conf, CONF_tcp_keepalives);
     gpps(sesskey, "TerminalType", "xterm", conf, CONF_termtype);
     gpps(sesskey, "TerminalSpeed", "38400,38400", conf, CONF_termspeed);
-    if (!gppmap(sesskey, "TerminalModes", conf, CONF_ttymodes)) {
+    if (gppmap(sesskey, "TerminalModes", conf, CONF_ttymodes)) {
+	/*
+	 * Backwards compatibility with old saved settings.
+	 *
+	 * From the invention of this setting through 0.67, the set of
+	 * terminal modes was fixed, and absence of a mode from this
+	 * setting meant the user had explicitly removed it from the
+	 * UI and we shouldn't send it.
+	 *
+	 * In 0.68, the IUTF8 mode was added, and in handling old
+	 * settings we inadvertently removed the ability to not send
+	 * a mode. Any mode not mentioned was treated as if it was
+	 * set to 'auto' (A).
+	 *
+	 * After 0.68, we added explicit notation to the setting format
+	 * when the user removes a known terminal mode from the list.
+	 *
+	 * So: if any of the modes from the original set is missing, we
+	 * assume this was an intentional removal by the user and add
+	 * an explicit removal ('N'); but if IUTF8 (or any other mode
+	 * added after 0.67) is missing, we assume that its absence is
+	 * due to the setting being old rather than intentional, and
+	 * add it with its default setting.
+	 *
+	 * (This does mean that if a 0.68 user explicitly removed IUTF8,
+	 * we add it back; but removing IUTF8 had no effect in 0.68, so
+	 * we're preserving behaviour, which is the best we can do.)
+	 */
+	for (i = 0; ttymodes[i]; i++) {
+	    if (!conf_get_str_str_opt(conf, CONF_ttymodes, ttymodes[i])) {
+		/* Mode not mentioned in setting. */
+		const char *def;
+		if (!strcmp(ttymodes[i], "IUTF8")) {
+		    /* Any new modes we add in future should be treated
+		     * this way too. */
+		    def = "A";  /* same as new-setting default below */
+		} else {
+		    /* One of the original modes. Absence is probably
+		     * deliberate. */
+		    def = "N";  /* don't send */
+		}
+		conf_set_str_str(conf, CONF_ttymodes, ttymodes[i], def);
+	    }
+	}
+    } else {
 	/* This hardcodes a big set of defaults in any new saved
 	 * sessions. Let's hope we don't change our mind. */
 	for (i = 0; ttymodes[i]; i++)
@@ -793,20 +855,44 @@ void load_open_settings(void *sesskey, Conf *conf)
     gprefs(sesskey, "Cipher", "\0",
 	   ciphernames, CIPHER_MAX, conf, CONF_ssh_cipherlist);
     {
-	/* Backward-compatibility: we used to have an option to
+	/* Backward-compatibility: before 0.58 (when the "KEX"
+	 * preference was first added), we had an option to
 	 * disable gex under the "bugs" panel after one report of
 	 * a server which offered it then choked, but we never got
 	 * a server version string or any other reports. */
-	const char *default_kexes;
+	const char *default_kexes,
+	           *normal_default = "ecdh,dh-gex-sha1,dh-group14-sha1,rsa,"
+		       "WARN,dh-group1-sha1",
+		   *bugdhgex2_default = "ecdh,dh-group14-sha1,rsa,"
+		       "WARN,dh-group1-sha1,dh-gex-sha1";
+	char *raw;
 	i = 2 - gppi_raw(sesskey, "BugDHGEx2", 0);
 	if (i == FORCE_ON)
-            default_kexes = "ecdh,dh-group14-sha1,dh-group1-sha1,rsa,"
-                "WARN,dh-gex-sha1";
+            default_kexes = bugdhgex2_default;
 	else
-            default_kexes = "ecdh,dh-gex-sha1,dh-group14-sha1,"
-                "dh-group1-sha1,rsa,WARN";
-	gprefs(sesskey, "KEX", default_kexes,
-	       kexnames, KEX_MAX, conf, CONF_ssh_kexlist);
+            default_kexes = normal_default;
+	/* Migration: after 0.67 we decided we didn't like
+	 * dh-group1-sha1. If it looks like the user never changed
+	 * the defaults, quietly upgrade their settings to demote it.
+	 * (If they did, they're on their own.) */
+	raw = gpps_raw(sesskey, "KEX", default_kexes);
+	assert(raw != NULL);
+	/* Lack of 'ecdh' tells us this was saved by 0.58-0.67
+	 * inclusive. If it was saved by a later version, we need
+	 * to leave it alone. */
+	if (strcmp(raw, "dh-group14-sha1,dh-group1-sha1,rsa,"
+		   "WARN,dh-gex-sha1") == 0) {
+	    /* Previously migrated from BugDHGEx2. */
+	    sfree(raw);
+	    raw = dupstr(bugdhgex2_default);
+	} else if (strcmp(raw, "dh-gex-sha1,dh-group14-sha1,"
+			  "dh-group1-sha1,rsa,WARN") == 0) {
+	    /* Untouched old default setting. */
+	    sfree(raw);
+	    raw = dupstr(normal_default);
+	}
+	gprefs_from_str(raw, kexnames, KEX_MAX, conf, CONF_ssh_kexlist);
+	sfree(raw);
     }
     gprefs(sesskey, "HostKey", "ed25519,ecdsa,rsa,dsa,WARN",
            hknames, HK_MAX, conf, CONF_ssh_hklist);
@@ -815,7 +901,7 @@ void load_open_settings(void *sesskey, Conf *conf)
     {
 	/* SSH-2 only by default */
 	int sshprot = gppi_raw(sesskey, "SshProt", 3);
-	/* Old sessions may contain the values correponding to the fallbacks
+	/* Old sessions may contain the values corresponding to the fallbacks
 	 * we used to allow; migrate them */
 	if (sshprot == 1)      sshprot = 0; /* => "SSH-1 only" */
 	else if (sshprot == 2) sshprot = 3; /* => "SSH-2 only" */
@@ -847,6 +933,7 @@ void load_open_settings(void *sesskey, Conf *conf)
     gppi(sesskey, "NoRemoteResize", 0, conf, CONF_no_remote_resize);
     gppi(sesskey, "NoAltScreen", 0, conf, CONF_no_alt_screen);
     gppi(sesskey, "NoRemoteWinTitle", 0, conf, CONF_no_remote_wintitle);
+    gppi(sesskey, "NoRemoteClearScroll", 0, conf, CONF_no_remote_clearscroll);
     {
 	/* Backward compatibility */
 	int no_remote_qtitle = gppi_raw(sesskey, "NoRemoteQTitle", 1);
