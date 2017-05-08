@@ -1,3 +1,3 @@
 #!/bin/bash
 
-make -f Makefile.cyg TOOLPATH=i686-w64-mingw32- XFLAGS="-DUNPROTECT" putty.exe
+make -j3 -f Makefile.mgw TOOLPATH=i686-w64-mingw32- XFLAGS="-DNO_MULTIMON" putty.exe

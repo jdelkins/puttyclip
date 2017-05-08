@@ -5288,7 +5288,7 @@ static void term_out(Terminal *term)
 		    term->termstate = TOPLEVEL;
 		} else if (c == '\033')
 		    term->termstate = OSC_MAYBE_ST;
-		else if (term->osc_strlen < OSC_STR_MAX-4) {
+		else {
 		    /* c is a unicode character make it UTF-8 in the string. */
 		    /* First resolve any Line/Direct character sets. */
 		    switch (c & CSET_MASK) {
@@ -5336,41 +5336,6 @@ static void term_out(Terminal *term)
 			}
 		    }
 		}
-		break;
-	      case DCS_STRING:
-		/*
-		 * DCS strings are defined by DEC to start with a valid CSI
-		 * like sequence; this means it's not quite as bad as OSC
-		 * for unintentional entry, however, it's still only two
-		 * characters so once we get to the string DCS commands will
-		 * be aborted by a CR or LF.
-		 *
-		 * Note for an ECMA "command string" the valid characters are:
-		 *          ^H ^I ^J ^K ^L ^M and Space .. '~'
-		 *
-		 * However, "SOS" uses a 'character string' which is any
-		 * sequence of characters except the terminators.
-		 * DEC ignores all control characters, except aborts.
-		 *
-		 * DCS: -> "command string"
-		 * APC: -> "command string"
-		 * PM: -> "command string"
-		 * SOS: -> "character string"
-		 *
-		 * Note: ECMA-48: The interpretation of the command string
-		 * or the character string is not defined by this Standard,
-		 * but instead requires prior agreement between the sender
-		 * and the recipient of the data.
-		 */
-		if (c == '\012' || c == '\015') {
-		    term->termstate = TOPLEVEL;
-		} else if (c == 0234 || c == '\007') {
-		    /* do_dcs(term) */;
-		    term->termstate = TOPLEVEL;
-		} else if (c == '\033')
-		    term->termstate = DCS_MAYBE_ST;
-		else if (term->dcs_strlen < DCS_STR_MAX)
-		    term->dcs_string[term->dcs_strlen++] = (char)c;
 		break;
 	      case SEEN_OSC_52:
 		switch (c) {
