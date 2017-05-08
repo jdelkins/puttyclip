@@ -8,7 +8,7 @@
  * default stuff used for local development runs of 'make'.
  */
 
-#define TEXTVER "JDE 0.67"
+#define TEXTVER "JDE 0.69"
 #define SSHVER "PuTTY-Unidentified-Local-Build"
 #define BINARY_VERSION 0,0,0,0
 
