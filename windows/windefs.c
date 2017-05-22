@@ -8,10 +8,21 @@
 
 FontSpec *platform_default_fontspec(const char *name)
 {
-    if (!strcmp(name, "Font"))
+    /*
+     * HACK: PuTTY-url
+     * Set font to Consolas on Windows Vista and above
+     */
+    OSVERSIONINFO versioninfo;
+    versioninfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+    GetVersionEx(&versioninfo);
+
+    if (!strcmp(name, "Font")) {
+        if (versioninfo.dwMajorVersion >= 6) {
+            return fontspec_new("Consolas", 0, 10, ANSI_CHARSET);
+        }
         return fontspec_new("Courier New", 0, 10, ANSI_CHARSET);
-    else
-        return fontspec_new("", 0, 0, 0);
+    }
+    return fontspec_new("", 0, 0, 0);
 }
 
 Filename *platform_default_filename(const char *name)

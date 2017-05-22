@@ -156,6 +156,22 @@ typedef struct terminal_tag Terminal;
 #define ATTR_DEFBG   (258 << ATTR_BGSHIFT)
 #define ATTR_DEFAULT (ATTR_DEFFG | ATTR_DEFBG)
 
+/*
+ * HACK: PuttyTray / Nutty
+ * Hyperlink stuff: define
+ */
+#define CHAR_MASK    0x000000FFUL
+
+/*
+ * HACK: PuttyTray / Nutty
+ * Hyperlink stuff: Underline settings
+ */
+enum {
+	URLHACK_UNDERLINE_ALWAYS,
+	URLHACK_UNDERLINE_HOVER,
+	URLHACK_UNDERLINE_NEVER
+};
+
 struct sesslist {
     int nsessions;
     const char **sessions;
@@ -932,12 +948,21 @@ void cleanup_exit(int);
     X(INT, NONE, shadowboldoffset) \
     X(INT, NONE, crhaslf) \
     X(STR, NONE, winclass) \
+    /*
+     * HACK: PuTTY-url settings
+     */ \
+    X(INT, NONE, url_ctrl_click) \
+    X(INT, NONE, url_underline) \
+    X(INT, NONE, url_defbrowser) \
+    X(INT, NONE, url_defregex) \
+    X(FILENAME, NONE, url_browser) \
+    X(STR, NONE, url_regex) \
     /* Z modem options */ \
     X(FILENAME, NONE, rzcommand) \
     X(STR, NONE, rzoptions) \
     X(FILENAME, NONE, szcommand) \
     X(STR, NONE, szoptions) \
-    X(FILENAME, NONE, zdownloaddir) \
+    X(FILENAME, NONE, zdownloaddir)
 
 /* Now define the actual enum of option keywords using that macro. */
 #define CONF_ENUM_DEF(valtype, keytype, keyword) CONF_ ## keyword,
@@ -1571,7 +1596,6 @@ void request_callback_notifications(toplevel_callback_notify_fn_t notify,
 #define IS_SURROGATE_PAIR(hs, ls) (IS_HIGH_SURROGATE(hs) && \
                                    IS_LOW_SURROGATE(ls))
 #endif
-
 
 #define IS_SURROGATE(wch) (((wch) >= HIGH_SURROGATE_START) &&   \
                            ((wch) <= LOW_SURROGATE_END))

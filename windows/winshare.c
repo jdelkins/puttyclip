@@ -37,6 +37,17 @@
 #endif
 #endif
 
+/*
+ * PuTTY-url: These are not (yet) available in wincrypt.h from mingw as of now
+ * (2015-06-23, w32api 3.17.2).
+ */
+#ifndef CRYPTPROTECTMEMORY_BLOCK_SIZE
+#define CRYPTPROTECTMEMORY_BLOCK_SIZE 16
+#endif
+#ifndef CRYPTPROTECTMEMORY_CROSS_PROCESS
+#define CRYPTPROTECTMEMORY_CROSS_PROCESS 1
+#endif
+
 #define CONNSHARE_PIPE_PREFIX "\\\\.\\pipe\\putty-connshare"
 #define CONNSHARE_MUTEX_PREFIX "Local\\putty-connshare-mutex"
 

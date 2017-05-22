@@ -366,6 +366,11 @@ struct terminal_tag {
     int scroll_on_disp;
     int scroll_on_key;
     int xterm_256_colour;
+
+    /*
+     * HACK: PuTTY-url
+     */
+    int url_update;
 };
 
 #define in_utf(term) ((term)->utf || (term)->ucsdata->line_codepage==CP_UTF8)
